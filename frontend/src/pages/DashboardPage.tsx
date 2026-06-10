@@ -210,11 +210,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-12">
-      <div className="flex flex-wrap items-center justify-center gap-8">
-        <Button onClick={() => navigate("/new")}>Новая должность</Button>
-        <Button onClick={() => navigate("/compare")} variant="secondary">Сравнение</Button>
-      </div>
-
       {draftMeta && (
         <Card className="border-accent/20 p-6">
           <div className="space-y-3">
