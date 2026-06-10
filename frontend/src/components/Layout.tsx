@@ -63,7 +63,6 @@ function Header() {
           ))}
         </nav>
       </div>
-      </div>
       <div className="flex items-center gap-2">
         <ThemeToggle />
         <span className="num h-8 w-8 rounded-full bg-[rgb(var(--field-bg))] text-center text-sm leading-8">
