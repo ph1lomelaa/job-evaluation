@@ -1,0 +1,91 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Тематические переменные (RGB-тройки для tailwind alpha) ─────────────── */
+:root {
+  /* Light по умолчанию */
+  --bg: 255 255 255;
+  --fg: 15 17 23;
+  --muted: 87 96 106;
+  --glass-bg: 250 252 255;
+  --glass-bg-alpha: 0.6;
+  --glass-border: 0 0 0 / 0.08;
+  --glass-border-hover: 0 0 0 / 0.15;
+  --glass-shadow: 0 0 0 / 0.1;
+  --field-bg: 0 0 0 / 0.05;
+  --field-border: 0 0 0 / 0.1;
+  --row-divider: 0 0 0 / 0.06;
+  --overlay: 0 0 0 / 0.3;
+}
+
+.dark {
+  --bg: 10 10 10;
+  --fg: 255 255 255;
+  --muted: 160 160 160;
+  --glass-bg: 20 20 20;
+  --glass-bg-alpha: 0.45;
+  --glass-border: 255 255 255 / 0.08;
+  --glass-border-hover: 255 255 255 / 0.15;
+  --glass-shadow: 0 0 0 / 0.35;
+  --field-bg: 255 255 255 / 0.05;
+  --field-border: 255 255 255 / 0.1;
+  --row-divider: 255 255 255 / 0.06;
+  --overlay: 0 0 0 / 0.5;
+}
+
+@layer base {
+  * {
+    border-color: rgb(var(--field-border));
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  h1 { @apply text-fg; font-size: 48px; font-weight: 600; letter-spacing: -1px; line-height: 1.2; }
+  h2 { font-size: 32px; font-weight: 600; line-height: 1.2; }
+  h3 { font-size: 24px; font-weight: 500; line-height: 1.2; }
+  ::placeholder { color: rgb(var(--muted) / 0.7); }
+  ::selection { background: #ff3d00; color: #fff; }
+}
+
+@layer components {
+  .glass {
+    background: rgb(var(--glass-bg) / var(--glass-bg-alpha));
+    border: 1px solid rgb(var(--glass-border));
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+  }
+  .glass-hover:hover { border-color: rgb(var(--glass-border-hover)); }
+
+  .field {
+    background: rgb(var(--field-bg));
+    border: 1px solid rgb(var(--field-border));
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: rgb(var(--fg));
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    font-size: 15px;
+  }
+  .field::placeholder {
+    color: rgb(var(--muted) / 0.6);
+  }
+  .field:focus {
+    border-color: #ff3d00;
+    box-shadow: 0 0 0 3px rgb(255 61 0 / 0.15);
+  }
+  select.field {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23575f6a' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+
+  .num { @apply font-mono tabular-nums; }
+}

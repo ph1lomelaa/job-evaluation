@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      JEVAL_MODEL: ${JEVAL_MODEL:-claude-opus-4-8}
+      JEVAL_HOST: 0.0.0.0
+      JEVAL_PORT: 8000
+      JEVAL_DB_URL: sqlite:////data/jeval.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/jeval:/app/jeval
+      - jeval_data:/data
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  jeval_data:
