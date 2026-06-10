@@ -268,8 +268,13 @@ function Line({ label, value }: { label: string; value: string }) {
 
 function RoleCard({ role, current }: { role: RoleCol; current?: boolean }) {
   return (
-    <Card className={cn(current && "border-accent")}>
-      {current && <div className="mb-2 text-xs uppercase tracking-wide text-accent">Текущая</div>}
+    <Card className={cn(current ? "border-accent/40" : "border-[rgb(var(--glass-border))]")}>
+      <div className="mb-3 flex items-center justify-between">
+        {current
+          ? <span className="text-xs font-medium uppercase tracking-wide text-accent">Текущая</span>
+          : <span className="text-xs text-muted uppercase tracking-wide">Якорь</span>
+        }
+      </div>
       <div className="min-h-[44px] text-sm font-medium">{role.name}</div>
 
       <div className="mt-4 flex items-baseline gap-3">
@@ -278,30 +283,33 @@ function RoleCard({ role, current }: { role: RoleCol; current?: boolean }) {
       </div>
 
       <div className="mt-3 flex items-center gap-3">
-        <span className="num">{role.profileLong}</span>
+        <span className="num text-sm">{role.profileLong}</span>
         <span className="text-xs text-muted">{PROFILE_LABEL[role.profile]}</span>
       </div>
 
-      <div className="num mt-2 text-sm text-muted">Итого {role.total}</div>
+      <div className="num mt-1 text-sm text-muted">Итого {role.total}</div>
 
-      <dl className="mt-4 space-y-2 border-t border-[rgb(var(--row-divider))] pt-4 text-sm">
-        <Row label="Know-How" value={role.knowHow} max={role.total} />
-        <Row label="Problem Solving" value={role.problemSolving} max={role.total} />
-        <Row label="Accountability" value={role.accountability} max={role.total} />
+      <dl className="mt-4 space-y-3 border-t border-[rgb(var(--row-divider))] pt-4 text-sm">
+        <Row label="Know-How" value={role.knowHow} max={role.total} current={current} />
+        <Row label="Problem Solving" value={role.problemSolving} max={role.total} current={current} />
+        <Row label="Accountability" value={role.accountability} max={role.total} current={current} />
       </dl>
     </Card>
   );
 }
 
-function Row({ label, value, max }: { label: string; value: number; max: number }) {
+function Row({ label, value, max, current }: { label: string; value: number; max: number; current?: boolean }) {
   return (
     <div>
       <div className="flex justify-between">
         <dt className="text-muted">{label}</dt>
         <dd className="num">{value}</dd>
       </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[rgb(var(--field-bg))]">
-        <div className="h-full bg-accent/70" style={{ width: `${Math.round((value / max) * 100)}%` }} />
+      <div className="mt-1 h-1 overflow-hidden rounded-full bg-[rgb(var(--field-bg))]">
+        <div
+          className={cn("h-full rounded-full", current ? "bg-accent/60" : "bg-[rgb(var(--muted)/0.4)]")}
+          style={{ width: `${Math.round((value / max) * 100)}%` }}
+        />
       </div>
     </div>
   );
