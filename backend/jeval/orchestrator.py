@@ -70,7 +70,7 @@ class JobEvaluator:
         # Контроль качества (раздел 9) + проверка иерархии (раздел 9.5).
         agent_text = f"{out.role_summary} {out.reasoning}"
         flags = run_qc(dossier, out.selections, score, agent_text=agent_text)
-        flags += run_hierarchy_qc(dossier, out.selections, score.grade, peers or [])
+        flags += run_hierarchy_qc(dossier, out.selections, score, peers or [])
         has_fail = has_blocking_failures(flags)
         has_warn = any(f.status == QCStatus.WARN for f in flags)
 
@@ -79,7 +79,7 @@ class JobEvaluator:
         else:
             status = EvaluationStatus.READY
 
-        recommendation = out.recommendation or _default_recommendation(status, has_fail)
+        recommendation = _committee_recommendation(status, score, flags)
 
         return Evaluation(
             position_id=dossier.id,
@@ -96,9 +96,26 @@ class JobEvaluator:
         )
 
 
-def _default_recommendation(status: EvaluationStatus, has_fail: bool) -> str:
-    if has_fail:
-        return "Вынести спорный фактор отдельно и уточнить данные перед комитетом."
+def _committee_recommendation(status, score, flags) -> str:
+    """Фактическая рекомендация вместо общей фразы, не помогающей комитету."""
+    kh = score.know_how.selection
+    ps = score.problem_solving.selection
+    acc = score.accountability.selection
+    codes = (
+        f"Know-How {kh.specialization.value}/{kh.management.value}/{kh.communication.value}, "
+        f"Problem Solving {ps.area.value}/{ps.complexity.value}, "
+        f"Accountability {acc.freedom.value}/{acc.magnitude.value}/"
+        f"{(acc.non_quantitative_impact or acc.impact).value}"
+    )
+    unresolved = [f for f in flags if f.status in {QCStatus.FAIL, QCStatus.WARN}]
     if status == EvaluationStatus.NEEDS_CLARIFICATION:
-        return "Провести интервью с руководителем / калибровку с якорными должностями."
-    return "Рассмотреть на Оценочном комитете."
+        return (
+            f"Предварительно зафиксировать {codes}: {score.total_points} баллов, грейд "
+            f"{score.grade}, профиль {score.profile_long}. Не утверждать до закрытия "
+            f"{len(unresolved)} замечаний QC и калибровки спорных подфакторов."
+        )
+    return (
+        f"Вынести на Оценочный комитет {codes}: {score.total_points} баллов, "
+        f"грейд {score.grade}, профиль {score.profile_long}; подтвердить сравнением "
+        "с якорными должностями той же семьи."
+    )

@@ -114,6 +114,21 @@ class ImpactType(StrEnum):
     P = "P"  # Primary / основное (владеет KPI и ресурсами)
 
 
+class NonQuantitativeImpact(StrEnum):
+    """Неколичественная ветка Accountability при Magnitude N.
+
+    Уровни I–VI объединяют область и характер воздействия. Они применяются,
+    когда денежный показатель не используется или искажает вклад должности.
+    """
+
+    I = "I"      # Вспомогательное
+    II = "II"    # Поддерживающее
+    III = "III"  # Операционное
+    IV = "IV"    # Аналитическое
+    V = "V"      # Направляющее
+    VI = "VI"    # Воздействующее
+
+
 # ── Производные ───────────────────────────────────────────────────────────────
 
 
@@ -135,6 +150,12 @@ class EvaluationStatus(StrEnum):
     READY = "ready"                       # Готово к оценке / оценка проведена
     NEEDS_CLARIFICATION = "needs_clarification"  # Требуются уточнения
     CANNOT_EVALUATE = "cannot_evaluate"   # Оценка невозможна без данных
+
+
+class DossierReviewStatus(StrEnum):
+    DRAFT_IMPORTED = "draft_imported"      # Импортировано из документа, человек ещё не проверил
+    MANUAL_DRAFT = "manual_draft"          # Создано вручную, ещё не проверено Gate 0
+    REVIEWED = "reviewed"                  # Человек подтвердил досье
 
 
 class QCSeverity(StrEnum):

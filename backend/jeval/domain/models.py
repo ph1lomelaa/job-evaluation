@@ -10,18 +10,20 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from .enums import (
     Communication,
     Confidence,
+    DossierReviewStatus,
     EvaluationStatus,
     FreedomToAct,
     ImpactType,
     Magnitude,
     ManagerialKnowHow,
+    NonQuantitativeImpact,
     ProblemArea,
     ProblemComplexity,
     Profile,
@@ -88,10 +90,37 @@ class ProblemCase(BaseModel):
     is_typical: bool = Field(default=True, description="Кейс типовой, а не исключительный")
 
 
+class ImportMetadata(BaseModel):
+    """Метаданные черновика, созданного из документа.
+
+    Важно: `missing_fields` означает "не найдено в источнике", а не "не важно".
+    Агент/парсер не должен заполнять эти поля догадками.
+    """
+
+    source_filename: Optional[str] = None
+    source_type: str = "manual"
+    source_mime_type: Optional[str] = None
+    source_size_bytes: Optional[int] = None
+    source_sha256: Optional[str] = None
+    extraction_method: str = "manual"
+    confidence: Confidence = Confidence.LOW
+    notes: list[str] = Field(default_factory=list)
+    missing_fields: list[str] = Field(default_factory=list)
+    field_sources: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Откуда взялось каждое поле: заголовок, строка таблицы, секция или цитата",
+    )
+    raw_text_preview: Optional[str] = None
+
+
 class JobDossier(BaseModel):
     """Описание должности на дату среза. Оцениваем РОЛЬ, не работника."""
 
     id: Optional[str] = None
+    company_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None
+    review_status: DossierReviewStatus = DossierReviewStatus.MANUAL_DRAFT
+    import_metadata: Optional[ImportMetadata] = None
     name: str
     dzo: Optional[str] = Field(default=None, description="ДЗО / организация")
     department: Optional[str] = None
@@ -139,6 +168,13 @@ class FactorEvidence(BaseModel):
     evidence: list[str] = Field(default_factory=list, description="2–3 факта из досье")
     doubts: list[str] = Field(default_factory=list)
     confidence: Confidence = Confidence.MEDIUM
+    modifier_reason: Optional[str] = Field(
+        default=None,
+        description="Почему выбран пограничный модификатор; обязателен по QC для +/−",
+    )
+    adjacent_level: Optional[str] = Field(
+        default=None, description="Соседняя ячейка таблицы, с которой сравнивался уровень"
+    )
 
 
 class KnowHowSelection(FactorEvidence):
@@ -151,12 +187,18 @@ class KnowHowSelection(FactorEvidence):
 class ProblemSolvingSelection(FactorEvidence):
     area: ProblemArea
     complexity: ProblemComplexity
+    plus_minus: int = Field(default=0, ge=-1, le=1)
 
 
 class AccountabilitySelection(FactorEvidence):
     freedom: FreedomToAct
     magnitude: Magnitude
-    impact: ImpactType
+    impact: Optional[ImpactType] = Field(
+        default=None, description="R/C/S/P — только для количественной ветки Magnitude 1–4"
+    )
+    non_quantitative_impact: Optional[NonQuantitativeImpact] = Field(
+        default=None, description="I–VI — объединённый уровень воздействия при Magnitude N"
+    )
     plus_minus: int = Field(default=0, ge=-1, le=1)
 
 
@@ -201,6 +243,13 @@ class ScoreResult(BaseModel):
         description="Длинный профиль (континуум P4…P1, L, A1…A4); * — вне допустимых пределов",
     )
     grade: int
+    grade_lower: int = 0
+    grade_mid: int = 0
+    grade_upper: int = 0
+    grade_zone: str = Field(default="Средняя", description="Положение внутри диапазона грейда")
+    grade_color: str = Field(default="green", description="Цвет зоны: blue/green/orange")
+    calculation_explanation: list[str] = Field(default_factory=list)
+    methodology_basis: str = ""
 
 
 # ── Проверки ──────────────────────────────────────────────────────────────────
@@ -241,6 +290,8 @@ class Evaluation(BaseModel):
 
     id: Optional[str] = None
     position_id: Optional[str] = None
+    company_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None
 
     status: EvaluationStatus
     gate: GateResult
@@ -256,3 +307,48 @@ class Evaluation(BaseModel):
     recommendation: str = ""
 
     created_at: datetime = Field(default_factory=_now)
+
+
+class DossierImportResult(BaseModel):
+    """Ответ API импорта документа в черновик JE-досье."""
+
+    position: JobDossier
+    raw_text: str = Field(default="", description="Извлеченный текст документа")
+    extracted_fields: list[str] = Field(default_factory=list)
+    missing_fields: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+# ── Публичные формы сбора описания должности ─────────────────────────────────
+
+
+class PublicFormCreate(BaseModel):
+    """Параметры одноразовой ссылки на стандартизированную форму JE-досье."""
+
+    title: str = Field(min_length=1, max_length=200)
+    recipient: Optional[str] = Field(default=None, max_length=200)
+    expires_in_days: int = Field(default=7, ge=1, le=90)
+
+
+class PublicJobForm(BaseModel):
+    id: str
+    token: str
+    company_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None
+    title: str
+    recipient: Optional[str] = None
+    status: Literal["active", "submitted", "expired"] = "active"
+    is_read: bool = False
+    position_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=_now)
+    expires_at: datetime
+    submitted_at: Optional[datetime] = None
+
+
+class PublicFormInfo(BaseModel):
+    """Безопасное публичное представление формы без внутренних идентификаторов."""
+
+    title: str
+    recipient: Optional[str] = None
+    status: Literal["active", "submitted", "expired"]
+    expires_at: datetime

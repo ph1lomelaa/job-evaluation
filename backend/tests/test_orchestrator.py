@@ -14,7 +14,7 @@ def test_full_flow_produces_score(full_dossier, fake_agent):
         + ev.score.problem_solving.points
         + ev.score.accountability.points
     )
-    assert 0 <= ev.score.grade <= 31
+    assert 0 <= ev.score.grade <= 38
     assert ev.selections is not None
 
 

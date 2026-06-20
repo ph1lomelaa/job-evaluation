@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        accent: { DEFAULT: "#ff3d00", soft: "#ff6b35" },
+        accent: { DEFAULT: "#7c4dba", soft: "#9a6bd3" },
         ok: "#10b981",
         warn: "#f59e0b",
         err: "#ff4444",
@@ -15,7 +15,8 @@ export default {
         muted: "rgb(var(--muted) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        sans: ["DM Sans", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+        display: ["Cormorant Garamond", "Georgia", "serif"],
         mono: ["JetBrains Mono", "Fira Code", "ui-monospace", "monospace"],
       },
       borderRadius: { glass: "12px" },

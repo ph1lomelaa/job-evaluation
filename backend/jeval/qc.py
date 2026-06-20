@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import re
+
 from .domain.enums import (
     Communication,
     FreedomToAct,
@@ -19,7 +21,7 @@ from .domain.enums import (
     SpecializedKnowHow,
 )
 from .domain.models import FactorSelections, JobDossier, QCFlag, ScoreResult
-from .scoring import PROFILE_MAX_STEPS, expected_magnitude
+from .scoring import PROFILE_MAX_STEPS
 
 # Слова-маркеры (раздел 9.2 и 9.3) — нормализуем регистр.
 _PERSON_MARKERS = (
@@ -64,6 +66,21 @@ def _flag(code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str) -> Q
     return QCFlag(code=code, severity=sev, status=status, message=msg, recommendation=rec)
 
 
+def _marker_pattern(marker: str) -> re.Pattern[str]:
+    # \b только перед маркером (без хвоста): "стаж" должен матчить "стажем",
+    # "стажировка", но "ит" не должен матчить середину слова "капитал"/"кредит".
+    return re.compile(rf"\b{re.escape(marker)}", re.UNICODE)
+
+
+def _find_markers(text: str, markers: tuple[str, ...]) -> list[str]:
+    """Маркеры, найденные с начала слова — а не как сырая подстрока."""
+    return [m for m in markers if _marker_pattern(m).search(text)]
+
+
+def _has_marker(text: str, markers: tuple[str, ...]) -> bool:
+    return any(_marker_pattern(m).search(text) for m in markers)
+
+
 def run_qc(
     dossier: JobDossier,
     selections: FactorSelections,
@@ -78,8 +95,48 @@ def run_qc(
     flags: list[QCFlag] = []
     text = _dossier_text(dossier) + " " + _selection_text(selections) + " " + agent_text.lower()
 
+    # Пограничный модификатор не является способом выразить неуверенность.
+    # Для каждого +/- нужны соседний уровень и проверяемое объяснение границы.
+    for factor_code, selection in (
+        ("know_how", kh), ("problem_solving", ps), ("accountability", acc)
+    ):
+        if selection.plus_minus:
+            documented = bool(selection.modifier_reason and selection.adjacent_level)
+            flags.append(
+                _flag(
+                    f"{factor_code}_modifier_boundary",
+                    QCSeverity.MEDIUM,
+                    QCStatus.PASS if documented else QCStatus.WARN,
+                    (
+                        f"Модификатор {selection.plus_minus:+d} подтверждён сравнением "
+                        f"с {selection.adjacent_level}"
+                        if documented
+                        else f"Модификатор {selection.plus_minus:+d} не имеет обоснования границы"
+                    ),
+                    "Указать соседнюю ячейку и факты: для '+' — что выше базы, но ниже "
+                    "следующего уровня; для '−' — что базовый уровень достигнут лишь по нижней границе.",
+                )
+            )
+
+    # В KMG DIGITAL финансовая величина не участвует: применяется только N/I–VI.
+    non_quant_ok = acc.magnitude == Magnitude.N and acc.non_quantitative_impact is not None
+    flags.append(
+        _flag(
+            "accountability_non_quantitative_policy",
+            QCSeverity.HIGH,
+            QCStatus.PASS if non_quant_ok else QCStatus.FAIL,
+            (
+                f"Применена неколичественная ветка N/{acc.non_quantitative_impact.value}"
+                if non_quant_ok
+                else "Accountability должна использовать корпоративную ветку N и уровень I–VI"
+            ),
+            "Не использовать доход, выручку или денежные диапазоны; выбрать N и подтвердить "
+            "организационный уровень воздействия I–VI.",
+        )
+    )
+
     # 9.2 Должность, а не человек
-    hits = [m for m in _PERSON_MARKERS if m in text]
+    hits = _find_markers(text, _PERSON_MARKERS)
     flags.append(
         _flag(
             "person_not_role", QCSeverity.HIGH,
@@ -92,7 +149,7 @@ def run_qc(
     )
 
     # 9.3 Независимость от оплаты
-    pay = [m for m in _PAY_MARKERS if m in text]
+    pay = _find_markers(text, _PAY_MARKERS)
     flags.append(
         _flag(
             "pay_independence", QCSeverity.HIGH,
@@ -118,25 +175,30 @@ def run_qc(
             )
         )
 
-    # 9.4 Impact S без joint KPI → для вертикали manager/subordinate это FAIL.
+    # Shared impact требует документированного совместного результата. Сам факт
+    # наличия руководителя не запрещает S: матричные и проектные роли могут иметь
+    # совместное влияние при явно разделённой ответственности.
     if acc.impact == ImpactType.S:
-        vertical = bool(dossier.reporting.manager or dossier.reporting.subordinates)
-        status = QCStatus.FAIL if vertical else QCStatus.WARN
+        shared_text = " ".join(dossier.kpis + dossier.key_results + acc.evidence).lower()
+        has_joint_result = _has_marker(
+            shared_text,
+            ("совмест", "разделенн", "совлад", "joint", "общий kpi", "общего результата"),
+        )
         flags.append(
             _flag(
-                "impact_s_requires_joint_kpi", QCSeverity.MEDIUM, status,
-                "Тип влияния S требует совместного (joint) KPI с равноправными владельцами"
-                if not vertical
-                else "Тип влияния S в вертикали «руководитель–подчинённый» недопустим",
-                "Подтвердить наличие joint KPI. S в вертикали «руководитель–подчинённый» — FAIL."
-                if not vertical
-                else "Понизить до C или P; в вертикали S не применяется.",
+                "impact_s_requires_joint_kpi", QCSeverity.MEDIUM,
+                QCStatus.PASS if has_joint_result else QCStatus.WARN,
+                "Тип влияния S подтверждён совместным результатом"
+                if has_joint_result
+                else "Тип влияния S не подтверждён совместным результатом или разделённой ответственностью",
+                "Указать общий конечный результат, других совладельцев и границы ответственности; "
+                "иначе пересмотреть тип влияния C или P.",
             )
         )
 
     # 9.4 Коммуникации 3 без кейсов влияния/сопротивления
     if kh.communication == Communication.THREE:
-        has_cases = any(m in text for m in _INFLUENCE_MARKERS)
+        has_cases = _has_marker(text, _INFLUENCE_MARKERS)
         flags.append(
             _flag(
                 "comm3_needs_resistance", QCSeverity.MEDIUM,
@@ -207,34 +269,26 @@ def run_qc(
     # 7.2 / 10.7 Magnitude: количественный уровень должен опираться на годовой показатель
     annual = _max_annual_amount(dossier)
     if acc.magnitude != Magnitude.N:
+        has_source = bool(dossier.scope.source and dossier.scope.source.strip())
+        magnitude_ok = annual is not None and has_source
         flags.append(
             _flag(
                 "magnitude_annual_figure", QCSeverity.MEDIUM,
-                QCStatus.PASS if annual is not None else QCStatus.WARN,
-                "Magnitude подтверждена годовым денежным показателем" if annual is not None
-                else f"Magnitude {acc.magnitude.value} без годового денежного показателя в досье",
-                "Указать годовой OPEX/CAPEX/выручку/бюджет в зоне роли с источником, "
-                "либо перейти на неколичественную ветку (N) с качественным обоснованием.",
-            )
-        )
-
-    # 7.2 Magnitude против диапазонов (диапазоны ПРЕДВАРИТЕЛЬНЫЕ — см. tables.py)
-    expected = expected_magnitude(annual)
-    if expected is not None and acc.magnitude != Magnitude.N \
-            and acc.magnitude.value != expected:
-        flags.append(
-            _flag(
-                "magnitude_scope_mismatch", QCSeverity.MEDIUM, QCStatus.WARN,
-                f"Выбрана Magnitude {acc.magnitude.value}, но по годовому показателю "
-                f"({annual:,.0f} ₸) ожидается {expected} (диапазоны предварительные)",
-                "Сверить объект воздействия и привязку к зоне роли; подтвердить выбор "
-                "или скорректировать уровень.",
+                QCStatus.PASS if magnitude_ok else QCStatus.WARN,
+                (
+                    f"Количественная Magnitude подтверждена годовым показателем "
+                    f"({annual:,.0f} ₸; источник: {dossier.scope.source})"
+                    if magnitude_ok
+                    else f"Magnitude {acc.magnitude.value} требует годового показателя в зоне роли и источника"
+                ),
+                "Указать годовой OPEX/CAPEX/выручку/бюджет в зоне роли и источник цифры; "
+                "если деньги искажают характер влияния, обосновать неколичественную ветку N.",
             )
         )
 
     # 9.4 «Масштаб всей компании» у поддерживающей функции
     func_text = " ".join(filter(None, (dossier.function, dossier.department, ""))).lower()
-    if acc.magnitude == Magnitude.FOUR and any(m in func_text for m in _SUPPORT_FUNCTION_MARKERS):
+    if acc.magnitude == Magnitude.FOUR and _has_marker(func_text, _SUPPORT_FUNCTION_MARKERS):
         flags.append(
             _flag(
                 "support_function_company_scale", QCSeverity.MEDIUM, QCStatus.WARN,
@@ -246,7 +300,7 @@ def run_qc(
 
     # Шаг 2 раздела 4: запрещённые эпитеты в резюме/обосновании агента
     if agent_text:
-        epithets = [m for m in _EPITHET_MARKERS if m in agent_text.lower()]
+        epithets = _find_markers(agent_text.lower(), _EPITHET_MARKERS)
         flags.append(
             _flag(
                 "neutral_summary", QCSeverity.LOW,

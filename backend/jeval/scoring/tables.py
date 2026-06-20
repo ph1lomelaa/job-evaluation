@@ -1,159 +1,139 @@
-"""Подстановочные таблицы Hay Group и доступ к ним.
+"""Точные расчётные таблицы из ``Калькулятор Hay Group.xlsm``.
 
-СТАТУС ТОЧНОСТИ
---------------
-* `HAY_SERIES`     — стандартный геометрический ряд Hay с шагом ~15%. Стабилен.
-* `PS_PERCENT`     — матрица «Решение вопросов %» (Area × Complexity). Сверена
-                     со страницей 5 PDF и совпадает со стандартным чартом.
-* Know-How и Accountability собраны по ДОКУМЕНТИРОВАННОЙ аддитивно-шаговой
-  модели Hay (каждый уровень фактора = смещение на N шагов ряда). Якорные
-  смещения (`*_OFFSET`, `*_ANCHOR`) ПРЕДВАРИТЕЛЬНЫ и подлежат сверке с
-  официальным чартом Korn Ferry перед боевым использованием. См. `TABLES_VERIFIED`.
-
-Заменить таблицы на выверенные значения = поправить константы в этом одном файле.
+Формулы воспроизводят XLM-функции COMP, IC, PTSIC и FINALITE листа
+``macro d'éval``. Значения не аппроксимируются арифметическим умножением.
 """
 
 from __future__ import annotations
 
-# Функции работают со строковыми ключами (значениями enum-ов), что позволяет
-# держать модуль таблиц независимым от моделей предметной области.
+TABLES_VERIFIED = True
 
-# Выставить True только после сверки Know-How/Accountability с официальным чартом.
-TABLES_VERIFIED = False
-
-
-# ── Геометрический ряд Hay (шаг ~15%) ─────────────────────────────────────────
-# Каждое значение ≈ предыдущее × 1.15 с округлением по конвенции Hay.
+# ``pas_hay`` / ``Valeurs_hay`` из макролиста. Первые значения нужны для
+# Accountability и низких значений Problem Solving; прежняя реализация ошибочно
+# начинала ряд с 38.
 HAY_SERIES: tuple[int, ...] = (
-    38, 43, 50, 57, 66, 76, 87, 100, 115, 132, 152, 175, 200, 230, 264, 304,
-    350, 400, 460, 528, 608, 700, 800, 920, 1056, 1216, 1400, 1600, 1840,
-    2112, 2432, 2800, 3216, 3696, 4256, 4896, 5632,
+    4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 19, 22, 25, 29, 33, 38, 43, 50,
+    57, 66, 76, 87, 100, 115, 132, 152, 175, 200, 230, 264, 304, 350,
+    400, 460, 528, 608, 700, 800, 920, 1056, 1216, 1400, 1600, 1840,
+    2112, 2432, 2800, 3200, 3680, 4224, 4864, 5600, 6400, 7360, 8448,
+    9728, 11200, 12800, 14720,
 )
 STEP_RATIO = 1.15
 
 
-def series_at(index: int) -> int:
-    """Значение ряда по индексу с защитой от выхода за границы."""
-    if index < 0:
-        raise ValueError(f"Индекс ряда не может быть отрицательным: {index}")
-    if index >= len(HAY_SERIES):
-        raise ValueError(f"Индекс ряда вне диапазона таблицы: {index}")
-    return HAY_SERIES[index]
-
-
 def _series_at_clamped(index: int) -> int:
-    """Значение ряда с мягким зажимом на границах.
-
-    Используется для boundary `plus_minus`, чтобы крайние ячейки не приводили к падению
-    расчета, если агент или пользовательское досье выбрали уже максимальный / минимальный
-    шаг и попросили сдвиг дальше.
-    """
-    if index < 0:
-        return HAY_SERIES[0]
-    if index >= len(HAY_SERIES):
-        return HAY_SERIES[-1]
-    return HAY_SERIES[index]
+    return HAY_SERIES[min(max(index, 0), len(HAY_SERIES) - 1)]
 
 
-# ── Фактор 1. Know-How ────────────────────────────────────────────────────────
-# index = SPEC_OFFSET + MGMT_OFFSET + COMM_OFFSET + KH_ANCHOR
-SPEC_OFFSET: dict[str, int] = {"A": 0, "B": 3, "C": 6, "D": 9, "E": 12, "F": 15, "G": 18, "H": 21}
-MGMT_OFFSET: dict[str, int] = {"T": 0, "I": 1, "II": 2, "III": 3, "IV": 4}
-COMM_OFFSET: dict[str, int] = {"1": 0, "2": 1, "3": 2}
-KH_ANCHOR = 0  # A / T / 1 → HAY_SERIES[0] = 38
+_SPEC_INDEX = {letter: i for i, letter in enumerate("ABCDEFGH")}
+_MGMT_INDEX = {level: i for i, level in enumerate(("T", "I", "II", "III", "IV"))}
+_AREA_INDEX = _SPEC_INDEX
+_FREEDOM_INDEX = _SPEC_INDEX
+_MAG_INDEX = {"N": 0, "1": 1, "2": 2, "3": 3, "4": 4}
+_IMPACT_INDEX = {"R": 0, "C": 1, "S": 2, "P": 3}
+_NON_QUANT_IMPACT_INDEX = {
+    level: i for i, level in enumerate(("I", "II", "III", "IV", "V", "VI"))
+}
 
 
 def know_how_points(spec: str, mgmt: str, comm: str, plus_minus: int = 0) -> int:
-    """Баллы Know-How по уровням специальных/управленческих знаний и коммуникаций.
-
-    `plus_minus` (-1/0/+1) сдвигает результат на один шаг ряда — модификатор
-    пограничности «+»/«−», применяется только если уровень на границе ячейки.
-    """
-    index = SPEC_OFFSET[spec] + MGMT_OFFSET[mgmt] + COMM_OFFSET[comm] + KH_ANCHOR + plus_minus
-    return _series_at_clamped(index)
+    """COMP: A/T/1 = 43; специализация и управление = 2 шага, общение = 1."""
+    # COMP normalises A/T/1 to key 17 in ``pas_hay`` => 43. A suffix ``-``
+    # shifts it to 38 and ``+`` to 50.
+    index = 16 + 2 * _SPEC_INDEX[spec] + 2 * _MGMT_INDEX[mgmt] + (int(comm) - 1)
+    return _series_at_clamped(index + plus_minus)
 
 
-# ── Фактор 2. Problem Solving % (Area × Complexity) ───────────────────────────
-# Сверено с PDF (стр. 5): A1=10%, H5=87%. Ряд процентов и аддитивная модель:
-#   pct_index = area_index + 2*(complexity-1)
 PS_PERCENT_SERIES: tuple[int, ...] = (
     10, 12, 14, 16, 19, 22, 25, 29, 33, 38, 43, 50, 57, 66, 76, 87,
 )
-PS_AREA_INDEX: dict[str, int] = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4, "F": 5, "G": 6, "H": 7}
 
 
-def problem_solving_percent(area: str, complexity: int) -> int:
-    """Процент Problem Solving по области и сложности (целое, напр. 43)."""
-    idx = PS_AREA_INDEX[area] + 2 * (complexity - 1)
-    return PS_PERCENT_SERIES[idx]
+def problem_solving_percent(area: str, complexity: int, plus_minus: int = 0) -> int:
+    """IC: точка пересечения области и сложности с пограничным шагом +/-.
+
+    В XLSM суффиксы обоих подфакторов сводятся к одному шагу -1/0/+1.
+    API хранит уже агрегированный модификатор.
+    """
+    # XLM IC uses MAX(0, plus + minus): a trailing ``+`` advances one
+    # percentage step; ``-`` marks the lower edge but does not decrement it.
+    idx = _AREA_INDEX[area] + 2 * (complexity - 1) + max(0, plus_minus)
+    return PS_PERCENT_SERIES[min(max(idx, 0), len(PS_PERCENT_SERIES) - 1)]
 
 
-def problem_solving_points(know_how: int, area: str, complexity: int) -> int:
-    """Баллы PS = Know-How × PS% (округление до ближайшего значения ряда Hay)."""
-    raw = know_how * problem_solving_percent(area, complexity) / 100.0
-    return _nearest_series(raw)
+def problem_solving_points(
+    know_how: int, area: str, complexity: int, plus_minus: int = 0
+) -> int:
+    """PTSIC: сдвиг Know-How по ряду Hay, как в макросе, без float-округления."""
+    kh_idx = series_index_of(know_how)
+    pct = problem_solving_percent(area, complexity, plus_minus)
+    pct_steps_below_100 = _steps_below_100(pct)
+    return _series_at_clamped(kh_idx - pct_steps_below_100)
 
 
-# ── Фактор 3. Accountability (Freedom × Magnitude × Impact) ───────────────────
-# index = FREEDOM_OFFSET + MAG_OFFSET + IMPACT_OFFSET + ACC_ANCHOR
-FREEDOM_OFFSET: dict[str, int] = {"A": 0, "B": 3, "C": 6, "D": 9, "E": 12, "F": 15, "G": 18, "H": 21}
-MAG_OFFSET: dict[str, int] = {"N": 0, "1": 0, "2": 1, "3": 2, "4": 3}
-IMPACT_OFFSET: dict[str, int] = {"R": 0, "C": 1, "S": 2, "P": 3}
-ACC_ANCHOR = 0  # A / 1 / R → HAY_SERIES[0] = 38
+def _steps_below_100(pct: int) -> int:
+    # Процентный ряд является фрагментом того же 15%-ряда: 10 находится за
+    # 16 шагов до 100, 87 — за один шаг.
+    pct_to_steps = {10: 16, 12: 15, 14: 14, 16: 13, 19: 12, 22: 11,
+                    25: 10, 29: 9, 33: 8, 38: 7, 43: 6, 50: 5,
+                    57: 4, 66: 3, 76: 2, 87: 1}
+    return pct_to_steps[pct]
 
 
 def accountability_points(
-    freedom: str, magnitude: str, impact: str, plus_minus: int = 0
+    freedom: str,
+    magnitude: str,
+    impact: str | None = None,
+    plus_minus: int = 0,
+    non_quantitative_impact: str | None = None,
 ) -> int:
-    """Баллы Accountability по свободе действий, величине и типу воздействия."""
+    """FINALITE для количественной и неколичественной веток.
+
+    При ``magnitude == N`` используется отдельная шкала I–VI. ``impact`` с N
+    оставлен лишь для чтения ранее сохранённых оценок и не должен создаваться
+    новыми оценками.
+    """
+    if magnitude == "N" and non_quantitative_impact:
+        index = (
+            5
+            + 3 * _FREEDOM_INDEX[freedom]
+            + 2 * _NON_QUANT_IMPACT_INDEX[non_quantitative_impact]
+            + plus_minus
+        )
+        return _series_at_clamped(index)
+
+    if impact is None:
+        branch = "I–VI" if magnitude == "N" else "R/C/S/P"
+        raise ValueError(f"Для Accountability требуется уровень воздействия {branch}")
+
+    # Формула макроса: freedom*3 + magnitude*2 + impact*2 + modifier - 1,
+    # где кодирование начинается с единицы. В нулевых индексах это 5 + ...
     index = (
-        FREEDOM_OFFSET[freedom]
-        + MAG_OFFSET[magnitude]
-        + IMPACT_OFFSET[impact]
-        + ACC_ANCHOR
+        5
+        + 3 * _FREEDOM_INDEX[freedom]
+        + 2 * _MAG_INDEX[magnitude]
+        + 2 * _IMPACT_INDEX[impact]
         + plus_minus
     )
     return _series_at_clamped(index)
 
 
-# ── Денежные диапазоны Magnitude (ПРЕДВАРИТЕЛЬНЫЕ / МОК) ──────────────────────
-# Годовые показатели в тенге для количественной ветки Magnitude (раздел 7.2).
-# ВНИМАНИЕ: границы — заглушка до получения утверждённой таблицы КМГ
-# (в методике Hay диапазоны индексируются и утверждаются компанией).
-# Замена = поправить границы здесь. См. MAGNITUDE_RANGES_VERIFIED.
+# Денежные границы в предоставленной постановочной таблице выражены в российских
+# рублях и относятся к конкретной версии таблицы. Корпоративной калибровки для
+# тенге в материалах нет, поэтому автоматически выводить уровень Magnitude из ₸
+# методологически нельзя.
 MAGNITUDE_RANGES_VERIFIED = False
-
-# (верхняя граница диапазона ₸/год, уровень Magnitude)
-MAGNITUDE_RANGES_KZT: tuple[tuple[float, str], ...] = (
-    (100_000_000, "1"),        # до 100 млн — очень незначительная
-    (1_000_000_000, "2"),      # 100 млн – 1 млрд — незначительная
-    (10_000_000_000, "3"),     # 1 – 10 млрд — средняя
-    (float("inf"), "4"),       # свыше 10 млрд — большая
-)
+MAGNITUDE_RANGES_KZT: tuple[tuple[float, str], ...] = ()
 
 
 def expected_magnitude(annual_amount_kzt: float | None) -> str | None:
-    """Ожидаемый уровень Magnitude по годовому денежному показателю.
-
-    None — нет денежного показателя (количественная ветка неприменима,
-    Magnitude остаётся N или обосновывается качественно).
-    """
-    if annual_amount_kzt is None or annual_amount_kzt <= 0:
-        return None
-    for upper, level in MAGNITUDE_RANGES_KZT:
-        if annual_amount_kzt <= upper:
-            return level
-    return "4"  # pragma: no cover — недостижимо из-за inf
-
-
-# ── Вспомогательное ───────────────────────────────────────────────────────────
-
-
-def _nearest_series(value: float) -> int:
-    """Ближайшее значение геометрического ряда Hay к произвольному числу."""
-    return min(HAY_SERIES, key=lambda v: abs(v - value))
+    """Не выводит Magnitude без утверждённой корпоративной матрицы в тенге."""
+    del annual_amount_kzt
+    return None
 
 
 def series_index_of(value: int) -> int:
-    """Индекс ближайшего значения ряда (для подсчёта шагов профиля)."""
-    return min(range(len(HAY_SERIES)), key=lambda i: abs(HAY_SERIES[i] - value))
+    try:
+        return HAY_SERIES.index(value)
+    except ValueError:
+        return min(range(len(HAY_SERIES)), key=lambda i: abs(HAY_SERIES[i] - value))

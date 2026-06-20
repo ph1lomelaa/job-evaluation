@@ -2,14 +2,14 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 type Theme = "dark" | "light";
 const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
-  theme: "dark",
+  theme: "light",
   toggle: () => {},
 });
 
 function initial(): Theme {
   const saved = localStorage.getItem("theme") as Theme | null;
   if (saved) return saved;
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return "light";
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

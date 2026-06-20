@@ -14,6 +14,7 @@ from jeval.domain.enums import (
     ImpactType,
     Magnitude,
     ManagerialKnowHow,
+    NonQuantitativeImpact,
     ProblemArea,
     ProblemComplexity,
     SpecializedKnowHow,
@@ -94,8 +95,8 @@ def sample_output() -> AgentOutput:
             ),
             accountability=AccountabilitySelection(
                 freedom=FreedomToAct.E,
-                magnitude=Magnitude.THREE,
-                impact=ImpactType.S,
+                magnitude=Magnitude.N,
+                non_quantitative_impact=NonQuantitativeImpact.V,
                 evidence=["joint KPI с добычей по готовности"],
                 confidence=Confidence.MEDIUM,
             ),

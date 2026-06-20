@@ -18,13 +18,14 @@ uvicorn jeval.api.main:app --reload
 
 | Модуль | Ответственность |
 |--------|-----------------|
-| `jeval/domain` | Pydantic-модели и enum-ы: JE-досье, уровни факторов, оценка |
+| `jeval/domain` | Pydantic-модели: identity, компании, JE-досье и оценка |
 | `jeval/scoring` | Детерминированный расчёт: таблицы Hay, грейд-матрица, профиль |
 | `jeval/gate.py` | Gate 0 — допуск к оценке |
 | `jeval/agent` | Системный промпт + вызов Claude (structured tool-use) |
 | `jeval/qc.py` | QC-флаги (раздел 9 инструкции) |
 | `jeval/orchestrator.py` | Сборка всего конвейера в одну `Evaluation` |
-| `jeval/store.py` | Хранилище (SQLite / in-memory) |
+| `jeval/security.py` | PBKDF2-пароли и хеширование session-токенов |
+| `jeval/store.py` | Реляционное multi-tenant хранилище (SQLite / in-memory) |
 | `jeval/api` | FastAPI-эндпоинты |
 
 **Граница LLM / детерминизма:** агент (`jeval/agent`) выбирает только уровни
@@ -37,6 +38,8 @@ uvicorn jeval.api.main:app --reload
 | `ANTHROPIC_API_KEY` | — | ключ Claude (нужен для реального агента) |
 | `JEVAL_MODEL` | `claude-opus-4-8` | модель агента |
 | `JEVAL_DB_URL` | `sqlite:///./jeval.db` | хранилище |
+| `JEVAL_AUTH_REQUIRED` | `true` | обязательная авторизация закрытых endpoints |
+| `JEVAL_SESSION_DAYS` | `30` | срок жизни серверной сессии |
 | `JEVAL_HOST` / `JEVAL_PORT` | `127.0.0.1` / `8000` | адрес сервиса |
 |' 
 

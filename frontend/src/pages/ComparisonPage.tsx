@@ -248,15 +248,6 @@ function gradeTone(delta: number): string {
   return delta > 0 ? "text-ok" : "text-accent";
 }
 
-function MiniHint({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="rounded-lg border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] p-3">
-      <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-1 text-sm">{text}</div>
-    </div>
-  );
-}
-
 function Line({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4">

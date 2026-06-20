@@ -2,5 +2,6 @@
 
 from .agent import AgentOutput, EvaluationAgent
 from .fake import FakeAgent
+from .groq_agent import GroqAgent
 
-__all__ = ["EvaluationAgent", "AgentOutput", "FakeAgent"]
+__all__ = ["EvaluationAgent", "AgentOutput", "FakeAgent", "GroqAgent"]

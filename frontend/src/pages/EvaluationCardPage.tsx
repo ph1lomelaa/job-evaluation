@@ -1,10 +1,17 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, ErrorBanner, Skeleton, StatusDot } from "../components/ui";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
-import { factorCodes, groupEvidence, scopeSummary, subfactorRows } from "../lib/mapping";
+import { useFactorLevelReference } from "../lib/factorLevels";
+import {
+  factorCodes,
+  groupEvidence,
+  scopeSummary,
+  subfactorRows,
+  type SubfactorRow,
+} from "../lib/mapping";
 import { useFetch } from "../lib/useFetch";
 import {
   CONFIDENCE_LABEL,
@@ -14,10 +21,23 @@ import {
   type Confidence,
   type Evaluation,
   type FactorGroup,
-  type GateResult,
+  type FactorLevelReference,
+  type JobDossier,
   type QCStatus,
   type ScoreResult,
 } from "../lib/types";
+
+const EMPTY_FACTOR_LEVELS: FactorLevelReference = {
+  specialized_know_how: {},
+  managerial_know_how: {},
+  communication: {},
+  problem_area: {},
+  problem_complexity: {},
+  freedom_to_act: {},
+  magnitude: {},
+  impact_type: {},
+  non_quantitative_impact: {},
+};
 
 const CONF_DOT: Record<Confidence, Parameters<typeof StatusDot>[0]["color"]> = {
   high: "green",
@@ -67,6 +87,7 @@ const FACTOR_HINTS: Record<FactorGroup, string> = {
 
 export default function EvaluationCardPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const [evaluating, setEvaluating] = useState(false);
   const location = useLocation();
   const [routeError, setRouteError] = useState<string | null>(
@@ -87,20 +108,24 @@ export default function EvaluationCardPage() {
     return [pos, sorted] as const;
   }, [data]);
 
-  // Выбранная версия (по умолчанию — последняя).
   const evaluation = versions.find((v) => v.id === versionId) ?? versions[0];
-  const selectedVersionIndex = evaluation ? versions.findIndex((v) => v.id === evaluation.id) : -1;
-  const previousVersion = selectedVersionIndex >= 0 ? versions[selectedVersionIndex + 1] : undefined;
-  const currentScore = evaluation?.score ?? null;
-  const previousScore = previousVersion?.score ?? null;
+
+  const needsDraftReview = Boolean(
+    data?.[0]?.review_status === "draft_imported" &&
+    data[0].import_metadata?.missing_fields.length,
+  );
 
   async function runEvaluation() {
+    if (needsDraftReview) {
+      navigate(`/positions/${id}/edit`);
+      return;
+    }
     setEvaluating(true);
     setEvalError(null);
     setRouteError(null);
     try {
       await api.evaluate(id);
-      setVersionId(null); // показать новую (последнюю) версию
+      setVersionId(null);
       reload();
     } catch (e) {
       setEvalError(e instanceof Error ? e.message : String(e));
@@ -172,31 +197,77 @@ export default function EvaluationCardPage() {
             ) : (
               <StatusDot color="gray">Предварительная оценка ещё не проводилась</StatusDot>
             )}
+            <div className="flex items-center gap-2 print:hidden">
+              <Button disabled={evaluating} onClick={runEvaluation}>
+                {needsDraftReview
+                  ? "Дополнить досье"
+                  : evaluating
+                    ? "Оценивается…"
+                    : evaluation
+                      ? "Переоценить"
+                      : "Запустить оценку"}
+              </Button>
+              {evaluation?.score && (
+                <Link to={`/compare?id=${id}`}>
+                  <Button variant="ghost">Сравнить</Button>
+                </Link>
+              )}
+              {evaluation && (
+                <Button variant="secondary" onClick={() => window.print()}>
+                  PDF
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 print:hidden">
-          {evaluation?.score && (
-            <Link to={`/compare?id=${id}`}>
-              <Button variant="ghost">Сравнить с якорями</Button>
-            </Link>
-          )}
-          {evaluation && (
-            <Button variant="secondary" onClick={() => window.print()}>
-              Печать / PDF
-            </Button>
-          )}
-          <Button disabled={evaluating} onClick={runEvaluation}>
-            {evaluating ? "Оценивается…" : evaluation ? "Переоценить" : "Запустить оценку"}
-          </Button>
-        </div>
       </div>
+
+      {position.review_status === "draft_imported" && position.import_metadata && (
+        <Card className="border-warn/30 p-5">
+          <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+            <div>
+              <div className="text-sm font-medium">Черновик импортирован из документа</div>
+              <p className="mt-2 text-sm text-muted">
+                Проверьте заполненные поля перед Gate 0 и оценкой. Данные, которых не было в
+                документе, не заполнялись автоматически.
+              </p>
+              {position.import_metadata.notes.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-muted">
+                  {position.import_metadata.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="text-muted">Источник: {position.import_metadata.source_filename ?? "—"}</div>
+              <div className="text-muted">Метод: {position.import_metadata.extraction_method}</div>
+              {position.import_metadata.missing_fields.length > 0 && (
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-muted">Не найдено в документе</div>
+                  <div className="mt-1 text-sm">
+                    {position.import_metadata.missing_fields.join(", ")}
+                  </div>
+                </div>
+              )}
+              <Link to={`/positions/${id}/edit`}>
+                <Button variant="secondary" className="mt-2">
+                  Проверить и дополнить
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <DossierPreview position={position} />
 
       {evaluation && (
         <Card className="border-accent/20 p-5">
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
               <div className="text-xs uppercase tracking-wide text-muted">Что означает статус</div>
-              <p className="mt-2 text-sm leading-relaxed text-muted">
+              <p className="mt-2 text-sm leading-relaxed text-[rgb(var(--fg)/0.78)]">
                 {STATUS_EXPLANATION[evaluation.status].summary}
               </p>
             </div>
@@ -214,71 +285,8 @@ export default function EvaluationCardPage() {
         </Card>
       )}
 
-      {versions.length > 1 && (
-        <Card>
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="text-sm text-muted">История версий</div>
-              <div className="mt-1 text-xs text-muted">
-                Новые версии сверху. Нажмите на версию, чтобы посмотреть её расчёт и QC.
-              </div>
-            </div>
-            {currentScore && previousScore && (
-              <div className="text-right text-xs text-muted">
-                <div>
-                  Изменение к предыдущей: {signed(scoreDelta(currentScore.total_points, previousScore.total_points))} баллов
-                </div>
-                <div>
-                  Грейд: {signed(scoreDelta(currentScore.grade, previousScore.grade))}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
-            {versions.map((v, index) => {
-              const selected = v.id === evaluation?.id;
-              const score = v.score;
-              return (
-                <button
-                  key={v.id ?? index}
-                  type="button"
-                  onClick={() => setVersionId(v.id ?? null)}
-                  className={cn(
-                    "rounded-xl border px-4 py-3 text-left transition-colors",
-                    selected
-                      ? "border-accent bg-[rgb(255_61_0_/_0.05)]"
-                      : "border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] hover:border-[rgb(var(--glass-border-hover))]",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">
-                        Версия {versions.length - index}
-                        {selected && <span className="ml-2 text-xs text-accent">выбрана</span>}
-                      </div>
-                      <div className="mt-1 text-xs text-muted">
-                        {v.created_at.slice(0, 16).replace("T", " ")}
-                      </div>
-                    </div>
-                    <StatusDot color={STATUS_DOT[v.status]}>{STATUS_LABEL[v.status]}</StatusDot>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                    <span className="num">Грейд {score?.grade ?? "—"}</span>
-                    {score && <span className="text-muted">Баллы {score.total_points}</span>}
-                    <StatusDot color={CONF_DOT[v.confidence]}>Уверенность: {CONFIDENCE_LABEL[v.confidence].toLowerCase()}</StatusDot>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-      )}
 
-      {!evaluation && <GatePreview positionId={id} />}
 
-      {evaluation && evaluation.status === "cannot_evaluate" && (
-        <CannotEvaluate evaluation={evaluation} />
-      )}
 
       {evaluation?.score && <ScoreView evaluation={evaluation} score={evaluation.score} />}
 
@@ -286,24 +294,20 @@ export default function EvaluationCardPage() {
         <>
           {evaluation.role_summary && (
             <Card>
-              <div className="mb-3 text-sm text-muted">Резюме должности</div>
-              <p className="text-sm leading-relaxed">{evaluation.role_summary}</p>
+              <div className="mb-3 text-sm font-semibold">Резюме должности</div>
+              <p className="text-[15px] leading-7">{evaluation.role_summary}</p>
             </Card>
           )}
 
-          {evaluation.status !== "cannot_evaluate" && (
-            <GateChecks gate={evaluation.gate} title="Проверка входных данных (Gate 0)" collapsible />
-          )}
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
-              <div className="mb-3 text-sm text-muted">Обоснование</div>
-              <p className="whitespace-pre-line text-sm leading-relaxed">
+              <div className="mb-3 text-sm font-semibold">Обоснование по факторам</div>
+              <p className="whitespace-pre-line text-[15px] leading-7">
                 {evaluation.reasoning || "—"}
               </p>
             </Card>
             <Card>
-              <div className="mb-3 text-sm text-muted">Вопросы на уточнение</div>
+              <div className="mb-3 text-sm font-semibold">Вопросы на уточнение</div>
               {evaluation.clarifying_questions.length > 0 ? (
                 <ol className="list-decimal space-y-2 pl-5 text-sm">
                   {evaluation.clarifying_questions.map((q) => (
@@ -318,8 +322,8 @@ export default function EvaluationCardPage() {
 
           <Card className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-sm text-muted">Рекомендация для Оценочного комитета</div>
-              <div className="mt-1 text-lg">{evaluation.recommendation || "—"}</div>
+              <div className="text-sm font-semibold">Рекомендация для Оценочного комитета</div>
+              <div className="mt-2 max-w-4xl text-[15px] font-medium leading-7">{evaluation.recommendation || "—"}</div>
             </div>
             <p className="max-w-[360px] text-xs text-muted">
               Оценка предварительная: итоговый грейд утверждает Оценочный комитет.
@@ -331,80 +335,93 @@ export default function EvaluationCardPage() {
   );
 }
 
-// ── Gate 0 до первой оценки ────────────────────────────────────────────────────
+function DossierPreview({ position }: { position: JobDossier }) {
+  const sections = [
+    { title: "Цель должности", items: position.purpose ? [position.purpose] : [] },
+    { title: "Ключевые результаты", items: position.key_results },
+    { title: "Обязанности", items: position.responsibilities },
+    { title: "KPI / показатели", items: position.kpis },
+    {
+      title: "Полномочия",
+      items: [
+        ...position.authorities.decides_alone.map((v) => `Решает самостоятельно: ${v}`),
+        ...position.authorities.requires_approval.map((v) => `Согласует: ${v.item} — ${v.approver}`),
+        ...position.authorities.recommends.map((v) => `Рекомендует: ${v}`),
+        ...position.limits.map((v) => `Лимит: ${v}`),
+      ],
+    },
+    {
+      title: "Контекст и документы",
+      items: [
+        position.organizational_context,
+        position.reporting.manager ? `Руководитель: ${position.reporting.manager}` : null,
+        position.scope.headcount != null ? `Численность: ${position.scope.headcount}` : null,
+        ...position.documents.map((d) => `Документ: ${d}`),
+      ].filter(Boolean) as string[],
+    },
+    ...(position.import_metadata
+      ? [
+          {
+            title: "Источники и provenance",
+            items: [
+              position.import_metadata.source_filename ? `Файл: ${position.import_metadata.source_filename}` : null,
+              position.import_metadata.source_type ? `Тип: ${position.import_metadata.source_type}` : null,
+              position.import_metadata.source_mime_type ? `MIME: ${position.import_metadata.source_mime_type}` : null,
+              position.import_metadata.source_size_bytes != null
+                ? `Размер: ${position.import_metadata.source_size_bytes} bytes`
+                : null,
+              position.import_metadata.source_sha256 ? `SHA-256: ${position.import_metadata.source_sha256}` : null,
+              position.import_metadata.extraction_method
+                ? `Метод: ${position.import_metadata.extraction_method}`
+                : null,
+              ...Object.entries(position.import_metadata.field_sources ?? {}).map(
+                ([field, values]) => `${field}: ${values.join(" | ")}`,
+              ),
+            ].filter(Boolean) as string[],
+          },
+        ]
+      : []),
+  ];
 
-function GatePreview({ positionId }: { positionId: string }) {
-  const { data, error, loading, reload } = useFetch(() => api.gateCheck(positionId), [positionId]);
-  if (loading) return <Skeleton className="h-48" />;
-  if (error || !data) return <ErrorBanner message={error ?? "Проверка недоступна"} onRetry={reload} />;
-  return <GateChecks gate={data} title="Входные данные" />;
-}
-
-function GateChecks({
-  gate,
-  title,
-  collapsible,
-}: {
-  gate: GateResult;
-  title: string;
-  collapsible?: boolean;
-}) {
-  const [open, setOpen] = useState(!collapsible);
-  const warns = gate.checks.filter((c) => c.status !== "pass").length;
   return (
     <Card>
-      <button
-        className={cn("flex w-full items-center justify-between text-left", !collapsible && "pointer-events-none")}
-        onClick={() => collapsible && setOpen((o) => !o)}
-      >
-        <span className="text-sm text-muted">
-          {title}
-          {warns > 0 && <span className="ml-2 text-warn">⚠ {warns}</span>}
-        </span>
-        {collapsible && <span className="num text-muted">{open ? "−" : "+"}</span>}
-      </button>
-      {open && (
-        <ul className="mt-4 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-          {gate.checks.map((c) => (
-            <li key={c.block} className="flex items-start gap-2">
-              <span className={cn("num w-4", FLAG[c.status].cls)}>{FLAG[c.status].ch}</span>
-              <span>
-                {c.block}
-                {c.note && <span className="block text-xs text-muted">{c.note}</span>}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">Распознанное досье</div>
+          <div className="mt-1 text-xs text-muted">Проверьте эти данные перед запуском оценки.</div>
+        </div>
+        <Link to={`/positions/${position.id}/edit`} className="print:hidden">
+          <Button variant="secondary">Редактировать</Button>
+        </Link>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {sections.map((section) => (
+          <div key={section.title} className="rounded-lg border border-[rgb(var(--row-divider))] p-4">
+            <div className="mb-2 text-xs uppercase tracking-wide text-muted">{section.title}</div>
+            {section.items.length > 0 ? (
+              <ul className="max-h-[260px] list-disc space-y-1 overflow-auto pl-5 text-sm">
+                {section.items.map((item, idx) => (
+                  <li key={`${section.title}-${idx}`}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">Не заполнено</p>
+            )}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
 
-function CannotEvaluate({ evaluation }: { evaluation: Evaluation }) {
-  return (
-    <>
-      <Card className="border-accent/40">
-        <div className="text-lg font-medium">Требуется дополнить данные</div>
-        <ul className="mt-4 space-y-2 text-sm">
-          {evaluation.gate.missing_fields.map((m) => (
-            <li key={m} className="flex items-start gap-2">
-              <span className="text-accent mt-0.5">✗</span>
-              <span>{m}</span>
-            </li>
-          ))}
-        </ul>
-      </Card>
-      <GateChecks gate={evaluation.gate} title="Проверка данных" />
-    </>
-  );
-}
 
 // ── Полная карточка с расчётом ────────────────────────────────────────────────
 
 function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: ScoreResult }) {
+  const { data: levels } = useFactorLevelReference();
   const groups: FactorGroup[] = ["know_how", "problem_solving", "accountability"];
   const codes = factorCodes(score);
-  const rows = subfactorRows(score);
+  const rows = subfactorRows(score, levels ?? EMPTY_FACTOR_LEVELS);
   const evidence = groupEvidence(score);
   const points: Record<FactorGroup, number> = {
     know_how: score.know_how.points,
@@ -421,7 +438,12 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
           value={String(score.total_points)}
           note="Сумма трех факторов"
         />
-        <Summary label="Грейд" value={String(score.grade)} big note="По матрице грейдов" />
+        <Summary
+          label="Грейд"
+          value={String(score.grade)}
+          big
+          note={`${score.grade_lower}–${score.grade_upper} · ${score.grade_zone} зона`}
+        />
         <SummaryProfile
           profile={score.profile}
           steps={score.profile_steps}
@@ -463,7 +485,7 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
           <Op>+</Op>
           <span>Accountability {score.accountability.points}</span>
           <Op>=</Op>
-          <span className="text-accent">Итого {score.total_points}</span>
+          <span className="font-semibold">Итого {score.total_points}</span>
           <Op>→</Op>
           <span>Грейд {score.grade}</span>
           <span className="text-muted">
@@ -471,6 +493,20 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
             {stepsWord(score.profile_steps)})
           </span>
         </div>
+      </Card>
+
+      <Card>
+        <div className="mb-3 text-sm font-medium">Подробное объяснение расчёта</div>
+        <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+          {(score.calculation_explanation ?? []).map((line, index) => (
+            <li key={index}>{line}</li>
+          ))}
+        </ol>
+        {score.methodology_basis && (
+          <p className="mt-4 border-t border-[rgb(var(--row-divider))] pt-3 text-xs leading-relaxed text-muted">
+            {score.methodology_basis}
+          </p>
+        )}
       </Card>
 
       {/* QC flags */}
@@ -520,13 +556,22 @@ function stepsWord(n: number): string {
   return "шагов";
 }
 
-function scoreDelta(current: number, previous: number): number {
-  return current - previous;
+function factWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "факт";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "факта";
+  return "фактов";
 }
 
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : String(value);
+function doubtWord(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return "сомнение";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "сомнения";
+  return "сомнений";
 }
+
 
 function Op({ children }: { children: string }) {
   return <span className="text-muted">{children}</span>;
@@ -610,7 +655,7 @@ function FactorGroupBlock({
   hint: string;
   code: string;
   points: number;
-  rows: { name: string; level: string }[];
+  rows: SubfactorRow[];
   evidence: string[];
   doubts: string[];
   confidence: Confidence;
@@ -620,18 +665,18 @@ function FactorGroupBlock({
     <div className="border-t border-[rgb(var(--row-divider))] first:border-t-0">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-start gap-4 px-5 py-3 text-left transition-colors hover:bg-[rgb(255_61_0_/_0.05)]"
+        className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035]"
       >
         <span className="flex-1 pr-3">
-          <span className="block text-xs uppercase tracking-wide text-muted">{label}</span>
+          <span className="block text-xs font-semibold uppercase tracking-wide text-[rgb(var(--fg)/0.82)]">{label}</span>
           <span className="mt-1 block text-xs text-muted">{hint}</span>
         </span>
         <span className="num text-sm text-muted">{code}</span>
-        <span className="num w-16 text-right text-sm">{points}</span>
+        <span className="num w-16 text-right text-sm font-semibold">{points}</span>
         <span className="w-24 text-right text-sm text-muted">
           <span className="block">{CONFIDENCE_LABEL[confidence]}</span>
           <span className="block text-[11px]">
-            {evidence.length} фактов · {doubts.length} сомнений
+            {evidence.length} {factWord(evidence.length)} · {doubts.length} {doubtWord(doubts.length)}
           </span>
         </span>
         <span className="num w-4 text-center text-muted">{open ? "−" : "+"}</span>
@@ -639,13 +684,21 @@ function FactorGroupBlock({
       {rows.map((r) => (
         <div
           key={r.name}
-          className="flex items-center gap-4 border-t border-[rgb(var(--row-divider))] px-5 py-2.5 text-sm"
+          className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 border-t border-[rgb(var(--row-divider))] px-5 py-4"
         >
-          <span className="flex-1">{r.name}</span>
-          <span className="num w-16 text-muted">{r.level}</span>
-          <span className="w-16" />
-          <span className="w-24" />
-          <span className="w-4" />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-fg">{r.name}</div>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-[rgb(var(--fg)/0.78)]">
+              {r.description}
+            </p>
+            <p className="mt-2 max-w-4xl text-xs leading-5 text-muted">
+              <span className="font-semibold text-[rgb(var(--fg)/0.72)]">Проверочный вопрос: </span>
+              {r.expertCheck}
+            </p>
+          </div>
+          <span className="num mt-0.5 min-w-10 rounded-lg border border-[#d9d4cd] bg-[#f8f6f2] px-2.5 py-1 text-center text-sm font-semibold dark:border-white/10 dark:bg-white/5">
+            {r.level}
+          </span>
         </div>
       ))}
       <AnimatePresence>
@@ -657,15 +710,15 @@ function FactorGroupBlock({
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="space-y-2 px-9 pb-4 pt-1 text-sm text-muted">
-              <div className="text-xs uppercase tracking-wide">Доказательства</div>
-              <ul className="list-disc space-y-1 pl-5">
+            <div className="space-y-3 bg-[#faf9f6] px-9 pb-5 pt-4 text-sm leading-6 text-[rgb(var(--fg)/0.82)] dark:bg-white/[0.025]">
+              <div className="text-xs font-semibold uppercase tracking-wide text-fg">Доказательства выбора уровня</div>
+              <ul className="list-disc space-y-1.5 pl-5">
                 {evidence.length > 0 ? evidence.map((e) => <li key={e}>{e}</li>) : <li>—</li>}
               </ul>
               {doubts.length > 0 && (
                 <>
-                  <div className="pt-1 text-xs uppercase tracking-wide">Сомнения</div>
-                  <ul className="list-disc space-y-1 pl-5">
+                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">Что нужно подтвердить</div>
+                  <ul className="list-disc space-y-1.5 pl-5">
                     {doubts.map((d) => (
                       <li key={d}>{d}</li>
                     ))}
@@ -712,7 +765,7 @@ function QcItem({ flag }: { flag: Evaluation["qc_flags"][number] }) {
       </span>
       <div className="text-sm">
         <div>{flag.message}</div>
-        {flag.recommendation && flag.recommendation !== "—" && (
+        {flag.status !== "pass" && flag.recommendation && flag.recommendation !== "—" && (
           <div className="mt-0.5 text-xs text-muted">{flag.recommendation}</div>
         )}
       </div>

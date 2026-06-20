@@ -20,9 +20,18 @@ class AgentOutput(BaseModel):
     role_summary: str = Field(description="Нейтральное резюме роли без оценочных эпитетов")
     selections: FactorSelections
     overall_confidence: Confidence = Confidence.MEDIUM
-    reasoning: str = Field(default="", description="Обоснование на ~1 страницу")
-    clarifying_questions: list[str] = Field(default_factory=list)
-    recommendation: str = Field(default="", description="Черновик рекомендации для комитета")
+    reasoning: str = Field(
+        default="",
+        description="Структурированное обоснование по трём факторам: факт → вывод → ограничение",
+    )
+    clarifying_questions: list[str] = Field(
+        default_factory=list,
+        description="Вопросы, привязанные к спорному подфактору и соседним уровням",
+    )
+    recommendation: str = Field(
+        default="",
+        description="Что принять предварительно и что подтвердить до решения комитета",
+    )
 
 
 def _tool_schema() -> dict[str, Any]:

@@ -14,14 +14,39 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     jeval_model: str = "claude-opus-4-8"
 
-    # Офлайн-режим: вместо Claude уровни выбирает детерминированная заглушка.
+    # Groq (альтернатива Anthropic, быстрее и дешевле для разработки)
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
+
+    # Выбор провайдера: "anthropic" | "groq" | "fake"
+    # "fake" — офлайн-заглушка без API-ключа
+    jeval_agent_provider: str = "anthropic"
+
+    # Офлайн-режим: вместо LLM уровни выбирает детерминированная заглушка.
     # Только для разработки/демо без API-ключа.
     jeval_fake_agent: bool = False
+    jeval_import_use_ai: bool = False
 
     # Сервис
     jeval_host: str = "127.0.0.1"
     jeval_port: int = 8000
     jeval_env: str = "development"
+
+    # Авторизация. В production включена по умолчанию; тестовая фабрика может
+    # явно отключить её для старых isolated unit-тестов.
+    jeval_auth_required: bool = True
+    jeval_session_days: int = 30
+    jeval_frontend_url: str = "http://127.0.0.1:5173"
+
+    # Google OAuth / OpenID Connect
+    jeval_google_client_id: str = ""
+    jeval_google_client_secret: str = ""
+    jeval_google_enabled: bool = False
+    jeval_google_redirect_uri: str = "http://127.0.0.1:8000/api/auth/google/callback"
+
+    # CORS: разрешённые origin'ы фронтенда (regex). Дефолт — только localhost для
+    # разработки; в проде задайте реальный домен через переменную окружения.
+    jeval_cors_origin_regex: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
     # Хранилище
     jeval_db_url: str = "sqlite:///./jeval.db"

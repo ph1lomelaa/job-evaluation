@@ -41,7 +41,18 @@ def test_pay_argument_detected(full_dossier, sample_output):
     assert _flag(flags, "pay_independence").status == QCStatus.FAIL
 
 
-def test_impact_s_in_vertical_fails(full_dossier, sample_output):
+def test_impact_s_without_documented_joint_result_warns(full_dossier, sample_output):
+    sample_output.selections.accountability.impact = ImpactType.S
+    full_dossier.kpis = ["Исполнение бюджета ТОиР"]
+    sample_output.selections.accountability.evidence = ["Влияет на готовность оборудования"]
     score = compute_score(sample_output.selections)
     flags = run_qc(full_dossier, sample_output.selections, score)
-    assert _flag(flags, "impact_s_requires_joint_kpi").status == QCStatus.FAIL
+    assert _flag(flags, "impact_s_requires_joint_kpi").status == QCStatus.WARN
+
+
+def test_impact_s_with_joint_result_passes(full_dossier, sample_output):
+    sample_output.selections.accountability.impact = ImpactType.S
+    full_dossier.kpis = ["Совместный KPI с добычей по готовности оборудования"]
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "impact_s_requires_joint_kpi").status == QCStatus.PASS

@@ -4,6 +4,7 @@ import type {
   Confidence,
   Evaluation,
   FactorGroup,
+  FactorLevelReference,
   JobDossier,
   PositionRow,
   ScoreResult,
@@ -26,7 +27,7 @@ export function toPositionRow(dossier: JobDossier, latest?: Evaluation): Positio
     name: dossier.name,
     dzo: dossier.dzo ?? "—",
     function: dossier.function ?? "—",
-    status: latest?.status ?? "not_evaluated",
+    status: latest?.status ?? (dossier.review_status === "draft_imported" ? "draft_imported" : "not_evaluated"),
     grade: latest?.score?.grade ?? null,
     confidence: latest ? latest.confidence : null,
     updatedAt: (dossier.updated_at ?? "").slice(0, 10),
@@ -39,42 +40,64 @@ function pm(plusMinus: number): string {
   return plusMinus > 0 ? "+" : plusMinus < 0 ? "−" : "";
 }
 
-/** Know-How: «E / III / 2», Problem Solving: «E / 4 / 43%», Accountability: «E / 3 / S». */
+/** Know-How: «E / III / 2», Problem Solving: «E / 4 / 43%», Accountability: «E / N / IV». */
 export function factorCodes(score: ScoreResult): Record<FactorGroup, string> {
   const kh = score.know_how.selection;
   const ps = score.problem_solving.selection;
   const acc = score.accountability.selection;
   return {
     know_how: `${kh.specialization} / ${kh.management} / ${kh.communication}${pm(kh.plus_minus)}`,
-    problem_solving: `${ps.area} / ${ps.complexity} / ${score.problem_solving.percentage}%`,
-    accountability: `${acc.freedom} / ${acc.magnitude} / ${acc.impact}${pm(acc.plus_minus)}`,
+    problem_solving: `${ps.area} / ${ps.complexity}${pm(ps.plus_minus ?? 0)} / ${score.problem_solving.percentage}%`,
+    accountability: `${acc.freedom} / ${acc.magnitude} / ${acc.non_quantitative_impact ?? acc.impact ?? "—"}${pm(acc.plus_minus)}`,
   };
 }
 
 export interface SubfactorRow {
   name: string;
   level: string;
+  description: string;
+  expertCheck: string;
 }
 
-/** Строки подфакторов для факторной таблицы (уровни — по группам). */
-export function subfactorRows(score: ScoreResult): Record<FactorGroup, SubfactorRow[]> {
+function detail(
+  name: string,
+  level: string,
+  levels: Record<string, string>,
+  expertCheck: string,
+): SubfactorRow {
+  return { name, level, description: levels[level] ?? "Описание уровня отсутствует.", expertCheck };
+}
+
+/** Строки подфакторов для факторной таблицы (уровни — по группам).
+ * Тексты уровней приходят с backend (`GET /api/reference/levels`) — тот же
+ * справочник, что и в системном промпте агента, без отдельной копии на фронте. */
+export function subfactorRows(score: ScoreResult, levels: FactorLevelReference): Record<FactorGroup, SubfactorRow[]> {
   const kh = score.know_how.selection;
   const ps = score.problem_solving.selection;
   const acc = score.accountability.selection;
   return {
     know_how: [
-      { name: "Специальные / практические знания", level: kh.specialization },
-      { name: "Управленческие знания", level: kh.management },
-      { name: "Коммуникации и воздействие", level: kh.communication },
+      detail("Специальные / практические знания", kh.specialization, levels.specialized_know_how,
+        "Какая глубина и широта знаний действительно необходима для стандартного выполнения роли, независимо от диплома и стажа работника?"),
+      detail("Планирование, организация и интеграция", kh.management, levels.managerial_know_how,
+        "Сколько разных процессов или функций роль должна интегрировать и какие компромиссы между ними принимает?"),
+      detail("Коммуникации и воздействие", kh.communication, levels.communication,
+        "Роль только передаёт информацию, рационально убеждает или должна менять позицию людей при реальном сопротивлении?"),
     ],
     problem_solving: [
-      { name: "Область решаемых вопросов", level: ps.area },
-      { name: "Сложность решаемых вопросов", level: String(ps.complexity) },
+      detail("Область решаемых вопросов / свобода мышления", ps.area, levels.problem_area,
+        "Насколько правила, процедуры, политики и помощь заранее определяют, что и как должна решать роль?"),
+      detail("Сложность решаемых вопросов", String(ps.complexity), levels.problem_complexity,
+        "Насколько решения повторяются и какие типовые кейсы подтверждают необходимость адаптации, синтеза или новых концепций?"),
     ],
     accountability: [
-      { name: "Свобода действий", level: acc.freedom },
-      { name: "Величина воздействия", level: acc.magnitude },
-      { name: "Тип влияния", level: acc.impact },
+      detail("Свобода действий", acc.freedom, levels.freedom_to_act,
+        "Какие решения роль принимает сама, что согласует, как контролируется результат и через какой период видны последствия?"),
+      detail("Ветка величины", acc.magnitude, levels.magnitude,
+        "В KMG DIGITAL используется N: доход, выручка и денежные диапазоны не участвуют в оценке."),
+      detail("Неколичественный уровень воздействия", acc.non_quantitative_impact ?? acc.impact ?? "—",
+        acc.non_quantitative_impact ? levels.non_quantitative_impact : levels.impact_type,
+        "Каков реальный организационный охват роли: отдельная услуга, подразделение, несколько функций, критичная система, команды или политика всей организации?"),
     ],
   };
 }

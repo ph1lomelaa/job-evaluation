@@ -10,10 +10,16 @@
 from __future__ import annotations
 
 from .domain.enums import ManagerialKnowHow, QCSeverity, QCStatus
-from .domain.models import Evaluation, FactorSelections, JobDossier, QCFlag
+from .domain.models import Evaluation, FactorSelections, JobDossier, QCFlag, ScoreResult
+from .scoring.grades import steps_15pct
 
 # Порядок управленческих уровней для сравнения «руководитель ≥ подчинённый».
 _MGMT_ORDER: dict[str, int] = {m.value: i for i, m in enumerate(ManagerialKnowHow)}
+_LETTER_ORDER = {v: i for i, v in enumerate("ABCDEFGH")}
+_COMM_ORDER = {"1": 0, "2": 1, "3": 2}
+_COMPLEXITY_ORDER = {str(i): i for i in range(1, 6)}
+_MAGNITUDE_ORDER = {"N": 0, "1": 1, "2": 2, "3": 3, "4": 4}
+_IMPACT_ORDER = {"R": 0, "C": 1, "S": 2, "P": 3}
 
 
 def _norm(s: str) -> str:
@@ -41,7 +47,7 @@ def _flag(code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str) -> Q
 def run_hierarchy_qc(
     dossier: JobDossier,
     selections: FactorSelections,
-    score_grade: int,
+    score: ScoreResult,
     peers: list[tuple[JobDossier, Evaluation]],
 ) -> list[QCFlag]:
     """QC-флаги иерархии. `peers` — другие должности системы с их последними оценками."""
@@ -72,6 +78,38 @@ def run_hierarchy_qc(
                 )
             )
 
+            manager = mgr_eval.selections
+            manager_score = mgr_eval.score
+            conflicts: list[str] = []
+            if _MGMT_ORDER[selections.know_how.management.value] > _MGMT_ORDER[manager.know_how.management.value]:
+                conflicts.append(
+                    f"управленческие знания {selections.know_how.management.value} > "
+                    f"{manager.know_how.management.value}"
+                )
+            if manager_score and score.problem_solving.percentage > manager_score.problem_solving.percentage:
+                conflicts.append(
+                    f"Problem Solving {score.problem_solving.percentage}% > "
+                    f"{manager_score.problem_solving.percentage}%"
+                )
+            if _LETTER_ORDER[selections.accountability.freedom.value] > _LETTER_ORDER[manager.accountability.freedom.value]:
+                conflicts.append(
+                    f"свобода действий {selections.accountability.freedom.value} > "
+                    f"{manager.accountability.freedom.value}"
+                )
+            flags.append(
+                _flag(
+                    "hierarchy_sensitive_factors",
+                    QCSeverity.MEDIUM if conflicts else QCSeverity.LOW,
+                    QCStatus.WARN if conflicts else QCStatus.PASS,
+                    (f"Иерархически чувствительные показатели выше руководителя «{mgr_dossier.name}»: "
+                     + "; ".join(conflicts)) if conflicts
+                    else f"Управленческие знания, Problem Solving и свобода действий согласованы с уровнем руководителя «{mgr_dossier.name}»",
+                    "Проверить традиционность или матричность структуры и обосновать исключение; "
+                    "более глубокие специальные знания эксперта сами по себе не являются ошибкой."
+                    if conflicts else "—",
+                )
+            )
+
     # 2) Сравнение с якорями: дистанция в грейдах и совпадение профиля.
     matched = 0
     for anchor_name in dossier.anchor_roles:
@@ -82,15 +120,16 @@ def run_hierarchy_qc(
         anchor_dossier, anchor_eval = found
         if anchor_eval.score is None:
             continue
-        diff = abs(score_grade - anchor_eval.score.grade)
-        if diff >= 3:
+        distance = steps_15pct(score.total_points, anchor_eval.score.total_points)
+        if distance >= 3:
             flags.append(
                 _flag(
                     "anchor_grade_gap", QCSeverity.MEDIUM, QCStatus.WARN,
-                    f"Разрыв с якорем «{anchor_dossier.name}»: {diff} грейда "
-                    f"({score_grade} против {anchor_eval.score.grade}) — возможен структурный разрыв",
-                    "Проверить, соответствует ли разница в баллах различиям в содержании "
-                    "(15%-правило, раздел 8.3); провести калибровку.",
+                    f"Разрыв с якорем «{anchor_dossier.name}»: {distance} шагов по 15% "
+                    f"({score.total_points} против {anchor_eval.score.total_points} баллов; "
+                    f"грейды {score.grade} и {anchor_eval.score.grade})",
+                    "Проверить, подтверждается ли расстояние различиями в содержании роли, "
+                    "и провести калибровку по семье должностей.",
                 )
             )
 

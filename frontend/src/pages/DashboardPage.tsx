@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, Card, ErrorBanner, Input, Skeleton, StatusDot } from "../components/ui";
+import { Button, Card, ErrorBanner, Input, StatusDot } from "../components/ui";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { latestByPosition, toPositionRow } from "../lib/mapping";
@@ -34,6 +34,7 @@ const STATUS_FILTERS: Array<{
   color: Parameters<typeof StatusDot>[0]["color"];
 }> = [
   { value: "", label: "Все", color: "gray" },
+  { value: "draft_imported", label: STATUS_LABEL.draft_imported, color: "blue" },
   { value: "not_evaluated", label: STATUS_LABEL.not_evaluated, color: "gray" },
   { value: "ready", label: STATUS_LABEL.ready, color: "green" },
   { value: "needs_clarification", label: STATUS_LABEL.needs_clarification, color: "amber" },
@@ -115,6 +116,7 @@ function formatSavedAt(ts: string): string {
 }
 
 const STATUS_DOT: Record<PositionStatus, Parameters<typeof StatusDot>[0]["color"]> = {
+  draft_imported: "blue",
   not_evaluated: "gray",
   ready: "green",
   needs_clarification: "amber",
@@ -134,6 +136,10 @@ export default function DashboardPage() {
   const [dept, setDept] = useState(() => initialFilters.dept);
   const [status, setStatus] = useState(() => initialFilters.status);
   const [draftMeta, setDraftMeta] = useState<DraftMeta | null>(() => readDraftMeta());
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const importInput = useRef<HTMLInputElement>(null);
 
   const { data, error, loading, reload } = useFetch(
     () => Promise.all([api.listPositions(), api.listEvaluations()]),
@@ -176,26 +182,27 @@ export default function DashboardPage() {
     setDraftMeta(null);
   }
 
+  async function importDocument(file: File | null) {
+    if (!file) return;
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const result = await api.importDocument(file, true);
+      const id = result.position.id;
+      reload();
+      if (id) navigate(`/positions/${id}`);
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImportBusy(false);
+      if (importInput.current) importInput.current.value = "";
+    }
+  }
+
   const departments = useMemo(
     () => [...new Set(allRows.flatMap((r) => [r.dzo, r.function]).filter((d) => d !== "—"))].sort(),
     [allRows],
   );
-
-  const kpis = useMemo(() => {
-    const graded = allRows.filter((r) => r.grade != null);
-    const avg = graded.length
-      ? (graded.reduce((s, r) => s + (r.grade ?? 0), 0) / graded.length).toFixed(1)
-      : "—";
-    return [
-      { label: "Всего должностей", value: String(allRows.length) },
-      { label: "Готово к комитету", value: String(allRows.filter((r) => r.status === "ready").length) },
-      { label: "Средний грейд", value: avg },
-      {
-        label: "Требуют уточнения",
-        value: String(allRows.filter((r) => r.status === "needs_clarification").length),
-      },
-    ];
-  }, [allRows]);
 
   const rows = useMemo(
     () =>
@@ -209,7 +216,15 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8">
+      <div className="border-t border-[#dfdbd5] pt-8 dark:border-white/10">
+        <div>
+          <h1 className="text-[28px] font-semibold tracking-[-0.5px]">Должности</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted">
+            Загрузите описание должности для автоматического черновика или откройте существующую карточку.
+          </p>
+        </div>
+      </div>
       {draftMeta && (
         <Card className="border-accent/20 p-6">
           <div className="space-y-3">
@@ -229,21 +244,38 @@ export default function DashboardPage() {
       )}
 
       {error && <ErrorBanner message={error} onRetry={reload} />}
+      {importError && <ErrorBanner message={importError} />}
 
-      {/* KPI */}
-      <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-        {loading
-          ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-[92px]" />)
-          : kpis.map((k) => (
-              <Card key={k.label} className="p-6 shadow-none" style={{
-                background: "rgb(var(--glass-bg) / 0.4)",
-                border: "1px solid rgb(var(--glass-border))",
-              }}>
-                <div className="text-sm text-muted">{k.label}</div>
-                <div className="num mt-3 text-4xl font-600">{k.value}</div>
-              </Card>
-            ))}
-      </div>
+      <Card
+        className={cn("dashboard-upload overflow-hidden p-0 transition-colors", dragActive && "border-accent bg-[#faf7fd] dark:bg-purple-950/20")}
+        onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragActive(false); }}
+        onDrop={(e) => { e.preventDefault(); setDragActive(false); void importDocument(e.dataTransfer.files?.[0] ?? null); }}
+      >
+        <div className="flex min-h-[300px] flex-col items-center justify-center px-6 py-12 text-center">
+          <div className="grid h-14 w-14 place-items-center rounded-full border border-[#ddd8d1] bg-white text-[#363330] dark:border-white/15 dark:bg-white/5 dark:text-white">
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M5 14v5h14v-5"/></svg>
+          </div>
+          <div className="mt-4 text-base font-semibold">Перетащите описание должности сюда</div>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <input
+              ref={importInput}
+              type="file"
+              accept=".docx"
+              className="hidden"
+              onChange={(e) => importDocument(e.target.files?.[0] ?? null)}
+            />
+            <Button
+              className="rounded-full bg-[#252527] px-6 text-white hover:bg-[#151516] dark:bg-white dark:text-[#252527] dark:hover:bg-[#ececec]"
+              disabled={importBusy}
+              onClick={() => importInput.current?.click()}
+            >
+              {importBusy ? "Создаём черновик…" : "Выбрать файл на компьютере"}
+            </Button>
+          </div>
+        </div>
+      </Card>
 
       {/* Status filter pills */}
       <div className="flex flex-wrap items-center gap-3">
@@ -258,12 +290,12 @@ export default function DashboardPage() {
               className={cn(
                 "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
                 isActive
-                  ? "border-accent bg-[rgb(255_61_0_/_0.1)] text-fg"
-                  : "border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] text-muted hover:text-fg",
+                  ? "border-[#252527] bg-[#252527] text-white dark:border-white dark:bg-white dark:text-[#252527]"
+                  : "border-[#ddd8d1] bg-white text-muted hover:border-[#aaa49c] hover:text-fg dark:border-white/10 dark:bg-white/5",
               )}
             >
               <span className="inline-block h-1.5 w-1.5 rounded-full" style={{
-                background: isActive ? "rgb(255, 61, 0)" : "rgb(var(--muted))"
+                background: isActive ? "currentColor" : "rgb(var(--muted))"
               }} />
               {item.label}
               <span className="num text-xs">{count}</span>
@@ -297,10 +329,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Таблица */}
-      <Card className="p-0 overflow-hidden">
+      <Card className="overflow-hidden rounded-[20px] border-[#e0dcd6] bg-white p-0 shadow-none dark:border-white/10 dark:bg-white/5">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-muted bg-[rgb(var(--field-bg))]">
+            <tr className="bg-[#f8f6f2] text-left text-muted dark:bg-white/5">
               {["Должность", "ДЗО", "Функция", "Статус", "Грейд", "Уверенность", "Обновлено"].map(
                 (h) => (
                   <th key={h} className="px-6 py-4 font-normal text-xs uppercase tracking-wide">
@@ -323,7 +355,7 @@ export default function DashboardPage() {
                 <tr
                   key={p.id}
                   onClick={() => navigate(`/positions/${p.id}`)}
-                  className="cursor-pointer border-t border-[rgb(var(--row-divider))] transition-colors hover:bg-[rgb(255_61_0_/_0.04)]"
+                  className="cursor-pointer border-t border-[rgb(var(--row-divider))] transition-colors hover:bg-[#faf8f4] dark:hover:bg-white/5"
                 >
                   <td className="px-6 py-4 font-medium">{p.name}</td>
                   <td className="px-6 py-4 text-muted text-sm">{p.dzo}</td>

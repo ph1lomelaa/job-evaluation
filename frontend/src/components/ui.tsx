@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import type {
   ButtonHTMLAttributes,
+  HTMLAttributes,
   InputHTMLAttributes,
   ReactNode,
   TextareaHTMLAttributes,
@@ -13,7 +14,7 @@ type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-accent text-white hover:opacity-90",
   secondary: "border border-[rgb(var(--field-border))] text-fg hover:border-[rgb(var(--glass-border-hover))]",
-  danger: "bg-accent text-white hover:opacity-90",
+  danger: "bg-[#252527] text-white hover:bg-[#151516] dark:bg-white dark:text-[#252527] dark:hover:bg-[#ececec]",
   ghost: "text-muted hover:text-fg",
 };
 
@@ -63,16 +64,18 @@ export function Card({
   children,
   hover,
   onClick,
+  ...rest
 }: {
   className?: string;
   children: ReactNode;
   hover?: boolean;
   onClick?: () => void;
-}) {
+} & HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       onClick={onClick}
       className={cn("glass p-6", hover && "glass-hover cursor-pointer", className)}
+      {...rest}
     >
       {children}
     </div>
@@ -102,7 +105,7 @@ export function StatusDot({ color, children }: { color: DotColor; children: Reac
 export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="glass flex flex-wrap items-center justify-between gap-3 border-accent/40 p-4 text-sm">
-      <span className="text-accent">⚠ {message}</span>
+      <span className="text-err">⚠ {message}</span>
       {onRetry && (
         <Button variant="secondary" onClick={onRetry}>
           Повторить

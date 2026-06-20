@@ -24,9 +24,19 @@ from jeval.scoring import compute_score, tables
 
 def test_series_monotonic():
     assert list(tables.HAY_SERIES) == sorted(tables.HAY_SERIES)
-    # шаг близок к 15%
-    for a, b in zip(tables.HAY_SERIES, tables.HAY_SERIES[1:]):
+    # На малых баллах округление сильнее; с 10 шаг близок к 15%.
+    start = tables.HAY_SERIES.index(10)
+    for a, b in zip(tables.HAY_SERIES[start:], tables.HAY_SERIES[start + 1:]):
         assert 1.10 <= b / a <= 1.20
+
+
+@pytest.mark.parametrize(
+    "spec,mgmt,comm,points",
+    [("A", "T", "1", 43), ("B", "T", "1", 57), ("E", "III", "2", 350),
+     ("H", "IV", "3", 1216)],
+)
+def test_know_how_matches_xlsm_comp(spec, mgmt, comm, points):
+    assert tables.know_how_points(spec, mgmt, comm) == points
 
 
 @pytest.mark.parametrize(
@@ -69,8 +79,35 @@ def test_plus_minus_is_clamped_at_lower_boundary():
         ),
     )
     score = compute_score(selections)
-    assert score.know_how.points == tables.HAY_SERIES[0]
-    assert score.accountability.points == tables.HAY_SERIES[0]
+    assert score.know_how.points == 38
+    assert score.accountability.points == 8
+
+
+def test_problem_solving_plus_minus_and_ptsic_match_xlsm():
+    assert tables.problem_solving_percent("E", 4) == 43
+    assert tables.problem_solving_percent("E", 4, -1) == 43
+    assert tables.problem_solving_percent("E", 4, 1) == 50
+    assert tables.problem_solving_points(304, "E", 4) == 132
+
+
+@pytest.mark.parametrize(
+    "freedom,magnitude,impact,points",
+    [("A", "N", "R", 9), ("A", "1", "P", 29), ("E", "3", "S", 200),
+     ("H", "4", "P", 1216)],
+)
+def test_accountability_matches_xlsm_finalite(freedom, magnitude, impact, points):
+    assert tables.accountability_points(freedom, magnitude, impact) == points
+
+
+@pytest.mark.parametrize(
+    "freedom,level,points",
+    [("A", "I", 9), ("A", "VI", 38), ("E", "I", 50), ("E", "IV", 115),
+     ("E", "VI", 200), ("H", "VI", 700)],
+)
+def test_accountability_non_quantitative_branch_matches_xlsm(freedom, level, points):
+    assert tables.accountability_points(
+        freedom, "N", non_quantitative_impact=level
+    ) == points
 
 
 def _selections(area="E", complexity=4, impact=ImpactType.S) -> FactorSelections:
@@ -94,7 +131,7 @@ def test_total_is_sum_of_factors():
     assert score.total_points == (
         score.know_how.points + score.problem_solving.points + score.accountability.points
     )
-    assert 0 <= score.grade <= 31
+    assert 0 <= score.grade <= 38
 
 
 def test_profile_direction():
@@ -113,3 +150,33 @@ def test_profile_direction():
         ),
     )
     assert compute_score(high_acc).profile == Profile.A
+
+
+def test_full_control_row_from_evaluation_template():
+    """F+/II+/3, E/4, E/4-/S = 460+200+230=890, grade 21, A1."""
+    selections = FactorSelections(
+        know_how=KnowHowSelection(
+            specialization=SpecializedKnowHow.F,
+            management=ManagerialKnowHow.II,
+            communication=Communication.THREE,
+            plus_minus=1,
+        ),
+        problem_solving=ProblemSolvingSelection(
+            area=ProblemArea.E,
+            complexity=ProblemComplexity.ADAPTIVE,
+        ),
+        accountability=AccountabilitySelection(
+            freedom=FreedomToAct.E,
+            magnitude=Magnitude.FOUR,
+            impact=ImpactType.S,
+            plus_minus=-1,
+        ),
+    )
+    score = compute_score(selections)
+    assert score.know_how.points == 460
+    assert score.problem_solving.percentage == 43
+    assert score.problem_solving.points == 200
+    assert score.accountability.points == 230
+    assert score.total_points == 890
+    assert score.grade == 21
+    assert score.profile_long == "A1"

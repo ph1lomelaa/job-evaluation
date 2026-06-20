@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button, Card, ErrorBanner, Field, Input, Stepper, Textarea } from "../components/ui";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Button, Card, ErrorBanner, Field, Input, Skeleton, Stepper, Textarea } from "../components/ui";
 import { api } from "../lib/api";
-import { cn } from "../lib/cn";
-import type { JobDossier, ProblemCase, QCStatus } from "../lib/types";
+import { useFetch } from "../lib/useFetch";
+import type { JobDossier, ProblemCase } from "../lib/types";
 
 const STEPS = [
   "Идентификация",
@@ -16,22 +16,6 @@ const STEPS = [
 ];
 
 const DRAFT_KEY = "jeval.job-form.draft.v1";
-
-const GATE_STEP: Partial<Record<string, number>> = {
-  "Цель должности": 1,
-  "Ключевые результаты": 1,
-  "Описание функций": 1,
-  "KPI / показатели блока": 1,
-  "Полномочия (сам/согласует/рекомендует)": 2,
-  "Масштаб воздействия": 3,
-  "Стейкхолдеры": 3,
-  "Якорные должности": 4,
-  "Типовые кейсы (Problem Solving)": 4,
-  "Оргконтекст": 5,
-  "Дата среза": 0,
-  "Лимиты (бюджет, закупки, stop-work)": 2,
-  "Подтверждение руководителя / HR": 6,
-};
 
 interface FormState {
   name: string;
@@ -99,6 +83,45 @@ function normalizeForm(raw: unknown): FormState {
     form[key] = typeof source[key] === "string" ? source[key] : "";
   }
   return form;
+}
+
+function formFromDossier(d: JobDossier): FormState {
+  return {
+    name: d.name ?? "",
+    dzo: d.dzo ?? "",
+    department: d.department ?? "",
+    function: d.function ?? "",
+    snapshotDate: d.snapshot_date ?? new Date().toISOString().slice(0, 10),
+    purpose: d.purpose ?? "",
+    keyResults: d.key_results.join("\n"),
+    responsibilities: d.responsibilities.join("\n"),
+    kpis: d.kpis.join("\n"),
+    decidesAlone: d.authorities.decides_alone.join("\n"),
+    requiresApproval: d.authorities.requires_approval
+      .map((item) => `${item.item} — ${item.approver}`)
+      .join("\n"),
+    recommends: d.authorities.recommends.join("\n"),
+    limits: d.limits.join("\n"),
+    opex: d.scope.annual_opex == null ? "" : String(d.scope.annual_opex),
+    capex: d.scope.annual_capex == null ? "" : String(d.scope.annual_capex),
+    headcount: d.scope.headcount == null ? "" : String(d.scope.headcount),
+    scopeSource: d.scope.source ?? "",
+    stakeholders: d.stakeholders.join("\n"),
+    anchors: d.anchor_roles.join("\n"),
+    problemCases: [
+      ...d.problem_cases,
+      ...d.problem_cases_structured.map((c) =>
+        [c.summary, c.given, c.unknown, c.alternatives, c.tradeoff, c.verification]
+          .filter(Boolean)
+          .join(" | "),
+      ),
+    ].join("\n"),
+    context: d.organizational_context ?? "",
+    manager: d.reporting.manager ?? "",
+    subordinates: d.reporting.subordinates.join("\n"),
+    documents: d.documents.join("\n"),
+    confirmedBy: d.confirmed_by ?? "",
+  };
 }
 
 function readDraft(): DraftSnapshot | null {
@@ -217,90 +240,14 @@ function toDossier(f: FormState): JobDossier {
   };
 }
 
-// Живой Gate 0: зеркало критических/рекомендуемых блоков jeval/gate.py.
-function gate(f: FormState): { block: string; status: QCStatus; note?: string }[] {
-  const filled = (v: string) => v.trim().length > 0;
-  const n = (v: string) => lines(v).length;
-  const cases = parseCases(f.problemCases);
-  const caseCount = cases.plain.length + cases.structured.length;
-  const critical = (ok: boolean): QCStatus => (ok ? "pass" : "fail");
-  const recommended = (ok: boolean): QCStatus => (ok ? "pass" : "warn");
-  return [
-    { block: "Цель должности", status: critical(filled(f.purpose)) },
-    {
-      block: "Ключевые результаты",
-      status: critical(n(f.keyResults) > 0),
-      note: n(f.keyResults) > 0 && n(f.keyResults) < 5 ? "Желательно 5–10" : undefined,
-    },
-    { block: "Описание функций", status: critical(n(f.responsibilities) > 0) },
-    { block: "Оргконтекст", status: critical(filled(f.context)) },
-    {
-      block: "Полномочия (сам/согласует/рекомендует)",
-      status: critical(filled(f.decidesAlone) || filled(f.requiresApproval) || filled(f.recommends)),
-    },
-    {
-      block: "Масштаб воздействия",
-      status: critical(num(f.opex) != null || num(f.capex) != null || num(f.headcount) != null),
-    },
-    { block: "KPI / показатели блока", status: critical(n(f.kpis) > 0) },
-    { block: "Стейкхолдеры", status: recommended(n(f.stakeholders) > 0) },
-    { block: "Якорные должности", status: recommended(n(f.anchors) > 0) },
-    {
-      block: "Типовые кейсы (Problem Solving)",
-      status: recommended(caseCount >= 3),
-      note: caseCount < 3 ? "Нужно минимум 3 кейса, можно смешивать обычные и структурированные" : undefined,
-    },
-    { block: "Дата среза", status: recommended(filled(f.snapshotDate)) },
-    { block: "Лимиты (бюджет, закупки, stop-work)", status: recommended(n(f.limits) > 0) },
-    { block: "Подтверждение руководителя / HR", status: recommended(filled(f.confirmedBy)) },
-  ];
-}
-
-const GATE_ICON: Record<QCStatus, { ch: string; cls: string }> = {
-  pass: { ch: "✓", cls: "text-ok" },
-  warn: { ch: "⚠", cls: "text-warn" },
-  fail: { ch: "✗", cls: "text-accent" },
-};
-
-function GateIssue({
-  check,
-  actionLabel,
-  stepLabel,
-  onOpen,
-  muted,
-}: {
-  check: { block: string; status: QCStatus; note?: string };
-  actionLabel: string;
-  stepLabel: string;
-  onOpen: () => void;
-  muted?: boolean;
-}) {
-  return (
-    <div className={cn("rounded-xl border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] p-3", muted && "opacity-90")}>
-      <div className="flex items-start gap-3">
-        <span className={cn("num w-4 shrink-0", GATE_ICON[check.status].cls)}>{GATE_ICON[check.status].ch}</span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm">{check.block}</div>
-          <div className="mt-0.5 text-xs text-muted">
-            {check.note ? <span>{check.note}</span> : <span>Проверьте этот блок досье.</span>}
-            <span className="ml-1">· {stepLabel}</span>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          className="px-2 py-1 text-[11px] min-h-0"
-          onClick={onOpen}
-          type="button"
-        >
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export default function JobFormPage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
+  const { data: existing, error: loadError, loading } = useFetch(
+    () => (id ? api.getPosition(id) : Promise.resolve(null)),
+    [id],
+  );
   const [draftSnapshot] = useState<DraftSnapshot | null>(() => readDraft());
   const [step, setStep] = useState(() => draftSnapshot?.step ?? 0);
   const [f, setF] = useState<FormState>(() => draftSnapshot?.form ?? EMPTY);
@@ -316,19 +263,19 @@ export default function JobFormPage() {
     if (list) setFiles((fs) => [...fs, ...Array.from(list)]);
   };
 
-  const checks = useMemo(() => gate(f), [f]);
-  const hasFail = checks.some((c) => c.status === "fail");
-  const hasWarn = checks.some((c) => c.status === "warn");
-  const criticalChecks = checks.filter((c) => c.status === "fail");
-  const warningChecks = checks.filter((c) => c.status === "warn");
   const noName = !f.name.trim();
-  const verdict = hasFail
-    ? { text: "Оценка невозможна без данных", cls: "text-accent" }
-    : hasWarn
-      ? { text: "Требуются уточнения", cls: "text-warn" }
-      : { text: "Готово к оценке", cls: "text-ok" };
 
   useEffect(() => {
+    if (existing) {
+      setF(formFromDossier(existing));
+      setStep(0);
+      setDraftRestored(false);
+      setDraftSavedAt(null);
+    }
+  }, [existing]);
+
+  useEffect(() => {
+    if (isEdit) return;
     const timer = window.setTimeout(() => {
       if (!hasFormContent(f)) {
         clearDraft();
@@ -340,7 +287,7 @@ export default function JobFormPage() {
       setDraftSavedAt(snapshot.savedAt);
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [f, step]);
+  }, [f, step, isEdit]);
 
   function discardDraft() {
     setF(EMPTY);
@@ -354,14 +301,15 @@ export default function JobFormPage() {
   async function save(): Promise<string | null> {
     setError(null);
     try {
-      const created = await api.createPosition(toDossier(f));
-      const id = created.id ?? null;
-      if (id) {
+      const body = toDossier(f);
+      const created = isEdit && id ? await api.updatePosition(id, body) : await api.createPosition(body);
+      const positionId = created.id ?? null;
+      if (positionId) {
         for (const file of files) {
-          await api.uploadDocument(id, file);
+          await api.uploadDocument(positionId, file);
         }
       }
-      return id;
+      return positionId;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       return null;
@@ -378,58 +326,51 @@ export default function JobFormPage() {
     }
   }
 
-  async function onEvaluate() {
-    setBusy("evaluate");
-    const id = await save();
-    if (!id) {
-      setBusy(null);
-      return;
-    }
-    try {
-      await api.evaluate(id);
-      discardDraft();
-      setBusy(null);
-      navigate(`/positions/${id}`);
-    } catch (e) {
-      // должность уже сохранена — показываем ошибку оценки на её карточке
-      const message = e instanceof Error ? e.message : String(e);
-      setBusy(null);
-      navigate(`/positions/${id}`, { state: { evaluationError: message } });
-    }
-  }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-[32px]">Новая должность</h1>
+      <h1 className="text-[32px]">{isEdit ? "Проверка досье" : "Новая должность"}</h1>
       <Stepper steps={STEPS} current={step} onSelect={setStep} />
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] px-4 py-3 text-xs text-muted">
-        <span>
-          {draftSavedAt
-            ? `Черновик сохранён локально ${formatSavedAt(draftSavedAt)}`
-            : "Автосохранение включено: черновик появится после первого заполнения."}
-        </span>
-        {draftSavedAt && (
-          <Button
-            variant="ghost"
-            className="px-3 py-1.5 text-xs min-h-0"
-            onClick={discardDraft}
-            type="button"
-          >
-            Очистить черновик
-          </Button>
-        )}
-      </div>
-      {draftRestored && (
-        <p className="text-xs text-muted">Черновик восстановлен из локального хранилища браузера.</p>
+      {!isEdit && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] px-4 py-3 text-xs text-muted">
+            <span>
+              {draftSavedAt
+                ? `Черновик сохранён локально ${formatSavedAt(draftSavedAt)}`
+                : "Автосохранение включено: черновик появится после первого заполнения."}
+            </span>
+            {draftSavedAt && (
+              <Button
+                variant="ghost"
+                className="px-3 py-1.5 text-xs min-h-0"
+                onClick={discardDraft}
+                type="button"
+              >
+                Очистить черновик
+              </Button>
+            )}
+          </div>
+          {draftRestored && (
+            <p className="text-xs text-muted">Черновик восстановлен из локального хранилища браузера.</p>
+          )}
+        </>
       )}
+      {isEdit && existing?.import_metadata?.missing_fields.length ? (
+        <Card className="border-warn/30 p-4 text-sm">
+          <div className="font-medium">Нужно дополнить перед оценкой</div>
+          <div className="mt-1 text-muted">{existing.import_metadata.missing_fields.join(", ")}</div>
+        </Card>
+      ) : null}
       <p className="max-w-[920px] text-sm text-muted">
         Сначала заполните цель, результаты, полномочия, масштаб и KPI. Именно эти блоки решают,
         можно ли вообще переходить к оценке.
       </p>
 
+      {loadError && <ErrorBanner message={loadError} />}
       {error && <ErrorBanner message={error} />}
+      {loading && isEdit && <Skeleton className="h-64" />}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      {(!loading || !isEdit) && <div className="grid grid-cols-1 gap-6">
         {/* Левая панель: поля шага */}
         <Card className="space-y-5">
           {step === 0 && (
@@ -601,79 +542,13 @@ export default function JobFormPage() {
               <Button onClick={() => setStep((s) => s + 1)}>Далее</Button>
             ) : (
               <Button disabled={noName || busy !== null} onClick={onSave}>
-                {busy === "save" ? "Сохранение…" : "Сохранить досье"}
+                {busy === "save" ? "Сохранение…" : isEdit ? "Сохранить проверенное досье" : "Сохранить досье"}
               </Button>
             )}
           </div>
         </Card>
 
-        {/* Правая sticky-панель: Gate 0 */}
-        <div>
-          <Card className="sticky top-24 space-y-4">
-            <div className="text-sm font-medium">Готовность к оценке (Gate 0)</div>
-            <p className="text-xs text-muted">
-              Если отсутствуют цель, полномочия, масштаб или контекст, уровни и грейд не
-              присваиваются.
-            </p>
-            {criticalChecks.length > 0 ? (
-              <div className="space-y-2">
-                <div className="text-xs uppercase tracking-wide text-accent">Блокеры</div>
-                <div className="space-y-2">
-                  {criticalChecks.map((c) => {
-                    const stepIndex = GATE_STEP[c.block] ?? 0;
-                    return (
-                      <GateIssue
-                        key={c.block}
-                        check={c}
-                        actionLabel={`Шаг ${stepIndex + 1}`}
-                        stepLabel={STEPS[stepIndex]}
-                        onOpen={() => setStep(stepIndex)}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-ok/20 bg-ok/5 px-3 py-2 text-xs text-muted">
-                Критических блокеров нет.
-              </div>
-            )}
-
-            {warningChecks.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs uppercase tracking-wide text-muted">Что стоит уточнить</div>
-                <div className="space-y-2">
-                  {warningChecks.map((c) => {
-                    const stepIndex = GATE_STEP[c.block] ?? 0;
-                    return (
-                      <GateIssue
-                        key={c.block}
-                        check={c}
-                        actionLabel={`Шаг ${stepIndex + 1}`}
-                        stepLabel={STEPS[stepIndex]}
-                        onOpen={() => setStep(stepIndex)}
-                        muted
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className={cn("border-t border-[rgb(var(--row-divider))] pt-3 text-sm font-medium", verdict.cls)}>
-              {verdict.text}
-            </div>
-            <p className="text-xs text-muted">Правило: «нет понимания — нет оценки».</p>
-            <Button
-              className="w-full"
-              disabled={hasFail || noName || busy !== null}
-              onClick={onEvaluate}
-            >
-              {busy === "evaluate" ? "Оценивается…" : "Запустить предварительную оценку"}
-            </Button>
-            {noName && <p className="text-xs text-muted">Укажите наименование должности.</p>}
-          </Card>
-        </div>
-      </div>
+      </div>}
     </div>
   );
 }

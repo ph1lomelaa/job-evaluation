@@ -22,6 +22,7 @@ def test_matrix_is_contiguous_and_ordered():
         (192, 12), (209, 12), (227, 12),
         (1056, 22), (1260, 22),
         (6020, 31),
+        (6021, 32), (17540, 38),
     ],
 )
 def test_grade_boundaries(points, grade):
@@ -30,7 +31,7 @@ def test_grade_boundaries(points, grade):
 
 def test_out_of_range():
     assert grade_for_points(-100) == 0
-    assert grade_for_points(99_999) == 31
+    assert grade_for_points(99_999) == 38
 
 
 def test_steps_15pct():

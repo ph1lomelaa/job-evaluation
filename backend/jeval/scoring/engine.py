@@ -15,7 +15,7 @@ from ..domain.models import (
     ScoreResult,
 )
 from . import tables
-from .grades import grade_for_points, steps_15pct
+from .grades import grade_band_for_points, grade_position, steps_15pct
 
 # Порог в шагах 15%, ниже которого профиль считается сбалансированным (L).
 PROFILE_BALANCED_STEPS = 1
@@ -46,12 +46,20 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
     )
 
     # 2. Problem Solving (% от Know-How)
-    ps_percent = tables.problem_solving_percent(ps.area.value, int(ps.complexity.value))
-    ps_points = tables.problem_solving_points(kh_points, ps.area.value, int(ps.complexity.value))
+    ps_percent = tables.problem_solving_percent(
+        ps.area.value, int(ps.complexity.value), ps.plus_minus
+    )
+    ps_points = tables.problem_solving_points(
+        kh_points, ps.area.value, int(ps.complexity.value), ps.plus_minus
+    )
 
     # 3. Accountability
     acc_points = tables.accountability_points(
-        acc.freedom.value, acc.magnitude.value, acc.impact.value, acc.plus_minus
+        acc.freedom.value,
+        acc.magnitude.value,
+        acc.impact.value if acc.impact else None,
+        acc.plus_minus,
+        acc.non_quantitative_impact.value if acc.non_quantitative_impact else None,
     )
 
     total = kh_points + ps_points + acc_points
@@ -65,6 +73,9 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
     else:
         profile = Profile.P
 
+    band = grade_band_for_points(total)
+    zone, color = grade_position(total, band)
+
     return ScoreResult(
         know_how=KnowHowResult(selection=kh, points=kh_points),
         problem_solving=ProblemSolvingResult(
@@ -75,5 +86,30 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
         profile=profile,
         profile_steps=steps,
         profile_long=long_profile(profile, steps),
-        grade=grade_for_points(total),
+        grade=band.grade,
+        grade_lower=band.lower,
+        grade_mid=band.mid,
+        grade_upper=band.upper,
+        grade_zone=zone,
+        grade_color=color,
+        calculation_explanation=[
+            f"Know-How {kh.specialization.value}/{kh.management.value}/{kh.communication.value}"
+            f"{_pm(kh.plus_minus)} = {kh_points} баллов по COMP из XLSM.",
+            f"Problem Solving {ps.area.value}/{ps.complexity.value}{_pm(ps.plus_minus)} = "
+            f"{ps_percent}% от Know-How = {ps_points} баллов по IC/PTSIC.",
+            f"Accountability {acc.freedom.value}/{acc.magnitude.value}/"
+            f"{(acc.non_quantitative_impact or acc.impact).value}"
+            f"{_pm(acc.plus_minus)} = {acc_points} баллов по FINALITE.",
+            f"Итого {kh_points} + {ps_points} + {acc_points} = {total}; "
+            f"грейд {band.grade}, диапазон {band.lower}–{band.upper}, {zone.lower()} зона.",
+        ],
+        methodology_basis=(
+            "Расчёт воспроизводит функции COMP, IC, PTSIC, FINALITE и таблицу Jobgrades "
+            "из «Калькулятор Hay Group.xlsm»; трактовка факторов — по предоставленным "
+            "подстановочным таблицам и руководству эксперта."
+        ),
     )
+
+
+def _pm(value: int) -> str:
+    return "+" if value > 0 else "−" if value < 0 else ""

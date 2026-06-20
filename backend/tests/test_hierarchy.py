@@ -5,6 +5,7 @@ from __future__ import annotations
 from jeval.domain.enums import (
     EvaluationStatus,
     Magnitude,
+    ImpactType,
     ManagerialKnowHow,
     QCStatus,
 )
@@ -31,15 +32,15 @@ def _flag(flags, code):
 # ── Magnitude: диапазоны и QC ─────────────────────────────────────────────────
 
 
-def test_expected_magnitude_bands():
+def test_expected_magnitude_is_disabled_without_verified_kzt_matrix():
     assert expected_magnitude(None) is None
-    assert expected_magnitude(50_000_000) == "1"
-    assert expected_magnitude(500_000_000) == "2"
-    assert expected_magnitude(4_000_000_000) == "3"
-    assert expected_magnitude(50_000_000_000) == "4"
+    assert expected_magnitude(50_000_000) is None
+    assert expected_magnitude(50_000_000_000) is None
 
 
 def test_qc_magnitude_without_annual_figure(full_dossier, sample_output):
+    sample_output.selections.accountability.magnitude = Magnitude.THREE
+    sample_output.selections.accountability.impact = ImpactType.C
     full_dossier.scope.annual_opex = None  # численность остаётся, денег нет
     score = compute_score(sample_output.selections)
     flags = run_qc(full_dossier, sample_output.selections, score)
@@ -47,17 +48,20 @@ def test_qc_magnitude_without_annual_figure(full_dossier, sample_output):
     assert f is not None and f.status == QCStatus.WARN
 
 
-def test_qc_magnitude_mismatch_with_scope(full_dossier, sample_output):
-    sample_output.selections.accountability.magnitude = Magnitude.ONE  # OPEX 4 млрд → ждём 3
+def test_qc_magnitude_requires_amount_source(full_dossier, sample_output):
+    sample_output.selections.accountability.magnitude = Magnitude.THREE
+    sample_output.selections.accountability.impact = ImpactType.C
+    full_dossier.scope.source = None
     score = compute_score(sample_output.selections)
     flags = run_qc(full_dossier, sample_output.selections, score)
-    f = _flag(flags, "magnitude_scope_mismatch")
+    f = _flag(flags, "magnitude_annual_figure")
     assert f is not None and f.status == QCStatus.WARN
 
 
 def test_qc_support_function_company_scale(full_dossier, sample_output):
     full_dossier.function = "HR / кадровая политика"
     sample_output.selections.accountability.magnitude = Magnitude.FOUR
+    sample_output.selections.accountability.impact = ImpactType.C
     score = compute_score(sample_output.selections)
     flags = run_qc(full_dossier, sample_output.selections, score)
     f = _flag(flags, "support_function_company_scale")
@@ -100,7 +104,7 @@ def test_subordinate_not_above_manager(full_dossier, sample_output):
     manager = JobDossier(id="mgr-1", name="Директор по производству")
     mgr_eval = _evaluation_for(sample_output.selections, score)
     flags = run_hierarchy_qc(
-        full_dossier, sample_output.selections, score.grade, [(manager, mgr_eval)]
+        full_dossier, sample_output.selections, score, [(manager, mgr_eval)]
     )
     f = _flag(flags, "subordinate_not_above_manager")
     assert f is not None and f.status == QCStatus.WARN
@@ -113,19 +117,36 @@ def test_subordinate_below_manager_passes(full_dossier, sample_output):
     manager = JobDossier(id="mgr-1", name="Директор по производству")
     mgr_eval = _evaluation_for(mgr_selections, compute_score(mgr_selections))
     flags = run_hierarchy_qc(
-        full_dossier, sample_output.selections, score.grade, [(manager, mgr_eval)]
+        full_dossier, sample_output.selections, score, [(manager, mgr_eval)]
     )
     f = _flag(flags, "subordinate_not_above_manager")
+    assert f is not None and f.status == QCStatus.PASS
+
+
+def test_specialized_knowledge_above_manager_is_not_blocking(full_dossier, sample_output):
+    score = compute_score(sample_output.selections)
+    mgr_selections = sample_output.selections.model_copy(deep=True)
+    mgr_selections.know_how.specialization = type(
+        mgr_selections.know_how.specialization
+    ).D
+    manager = JobDossier(id="mgr-1", name="Директор по производству")
+    mgr_eval = _evaluation_for(mgr_selections, compute_score(mgr_selections))
+    flags = run_hierarchy_qc(
+        full_dossier, sample_output.selections, score, [(manager, mgr_eval)]
+    )
+    f = _flag(flags, "hierarchy_sensitive_factors")
     assert f is not None and f.status == QCStatus.PASS
 
 
 def test_anchor_grade_gap_and_calibration(full_dossier, sample_output):
     score = compute_score(sample_output.selections)
     anchor = JobDossier(id="a-1", name="Главный инженер")
-    anchor_score = score.model_copy(update={"grade": score.grade + 4})
+    anchor_score = score.model_copy(
+        update={"grade": score.grade + 4, "total_points": score.total_points * 2}
+    )
     anchor_eval = _evaluation_for(sample_output.selections, anchor_score)
     flags = run_hierarchy_qc(
-        full_dossier, sample_output.selections, score.grade, [(anchor, anchor_eval)]
+        full_dossier, sample_output.selections, score, [(anchor, anchor_eval)]
     )
     assert _flag(flags, "anchor_grade_gap") is not None
     calibration = _flag(flags, "anchor_calibration")
@@ -134,6 +155,6 @@ def test_anchor_grade_gap_and_calibration(full_dossier, sample_output):
 
 def test_anchors_not_in_system_warns(full_dossier, sample_output):
     score = compute_score(sample_output.selections)
-    flags = run_hierarchy_qc(full_dossier, sample_output.selections, score.grade, [])
+    flags = run_hierarchy_qc(full_dossier, sample_output.selections, score, [])
     f = _flag(flags, "anchors_not_in_system")
     assert f is not None and f.status == QCStatus.WARN

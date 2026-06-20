@@ -12,9 +12,9 @@ from ..domain.enums import (
     Communication,
     Confidence,
     FreedomToAct,
-    ImpactType,
     Magnitude,
     ManagerialKnowHow,
+    NonQuantitativeImpact,
     ProblemArea,
     ProblemComplexity,
     SpecializedKnowHow,
@@ -95,25 +95,19 @@ def _profile_from_dossier(dossier: JobDossier) -> dict:
     fa_idx = min(decisions + (1 if headcount > 50 else 0), len(fa_levels) - 1)
     freedom = fa_levels[fa_idx]
 
-    # Magnitude
-    if opex > 3_000_000_000:    magnitude = Magnitude.FOUR
-    elif opex > 500_000_000:    magnitude = Magnitude.THREE
-    elif opex > 50_000_000:     magnitude = Magnitude.TWO
-    elif opex > 0:              magnitude = Magnitude.ONE
-    else:                       magnitude = Magnitude.N
+    # Без утверждённой корпоративной матрицы в ₸ офлайн-эвристика не имеет
+    # права переводить денежную сумму в уровень 1–4.
+    magnitude = Magnitude.N
 
-    # Impact: P если владеет KPI и есть ресурсы, иначе C/S
-    if decisions >= 3 and subordinates >= 2:
-        impact = ImpactType.P
-    elif decisions >= 2 or subordinates >= 1:
-        impact = ImpactType.S
-    else:
-        impact = ImpactType.C
+    # Неколичественная ветка I–VI: организационный охват, а не доход/выручка.
+    scope_score = min(5, subordinates + cases + (1 if len(dossier.stakeholders) >= 4 else 0))
+    non_quantitative_impact = list(NonQuantitativeImpact)[scope_score]
 
     return dict(
         kh_spec=kh_spec, kh_mgmt=kh_mgmt, kh_comm=kh_comm,
         ps_area=ps_area, ps_complexity=ps_complexity,
-        freedom=freedom, magnitude=magnitude, impact=impact,
+        freedom=freedom, magnitude=magnitude,
+        non_quantitative_impact=non_quantitative_impact,
     )
 
 
@@ -148,7 +142,7 @@ class FakeAgent:
                 accountability=AccountabilitySelection(
                     freedom=p["freedom"],
                     magnitude=p["magnitude"],
-                    impact=p["impact"],
+                    non_quantitative_impact=p["non_quantitative_impact"],
                     evidence=_first(dossier.authorities.decides_alone, 3, "Полномочия не детализированы"),
                 ),
             ),

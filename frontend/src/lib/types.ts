@@ -4,6 +4,53 @@ export type Confidence = "high" | "medium" | "low";
 export type EvaluationStatus = "ready" | "needs_clarification" | "cannot_evaluate";
 export type QCStatus = "pass" | "warn" | "fail";
 export type Profile = "A" | "P" | "L";
+export type DossierReviewStatus = "draft_imported" | "manual_draft" | "reviewed";
+
+// ── Аккаунт и рабочие пространства ──────────────────────────────────────────
+
+export type MemberRole = "owner" | "admin" | "evaluator" | "viewer";
+export type AccessRole = "viewer" | "admin";
+
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+  created_at: string;
+}
+
+export interface Company {
+  id: string;
+  name: string;
+  slug: string;
+  role: MemberRole;
+  created_at: string;
+}
+
+export interface CompanyInviteSummary {
+  id: string;
+  company_id: string;
+  email: string;
+  role: AccessRole;
+  status: "invited" | "active" | "disabled";
+  created_at: string;
+  updated_at: string;
+  accepted_at?: string | null;
+  created_by_user_id?: string | null;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: "cookie";
+  user: User;
+  companies: Company[];
+  csrf_token: string;
+}
+
+export interface MeResponse {
+  user: User;
+  companies: Company[];
+  csrf_token: string;
+}
 
 // ── JE-досье (вход) ───────────────────────────────────────────────────────────
 
@@ -48,6 +95,10 @@ export interface ProblemCase {
 
 export interface JobDossier {
   id?: string | null;
+  company_id?: string | null;
+  created_by_user_id?: string | null;
+  review_status?: DossierReviewStatus;
+  import_metadata?: ImportMetadata | null;
   name: string;
   dzo?: string | null;
   department?: string | null;
@@ -72,6 +123,71 @@ export interface JobDossier {
   updated_at?: string;
 }
 
+export interface ImportMetadata {
+  source_filename?: string | null;
+  source_type: string;
+  source_mime_type?: string | null;
+  source_size_bytes?: number | null;
+  source_sha256?: string | null;
+  extraction_method: string;
+  confidence: Confidence;
+  notes: string[];
+  missing_fields: string[];
+  field_sources: Record<string, string[]>;
+  raw_text_preview?: string | null;
+}
+
+export interface DossierImportResult {
+  position: JobDossier;
+  raw_text: string;
+  extracted_fields: string[];
+  missing_fields: string[];
+  notes: string[];
+}
+
+export interface GradeBand {
+  grade: number;
+  lower: number;
+  mid: number;
+  upper: number;
+}
+
+// Описания уровней подфакторов с backend (jeval/reference/levels.py) — единый
+// источник текста для UI и системного промпта агента, без локальной копии.
+export interface FactorLevelReference {
+  specialized_know_how: Record<string, string>;
+  managerial_know_how: Record<string, string>;
+  communication: Record<string, string>;
+  problem_area: Record<string, string>;
+  problem_complexity: Record<string, string>;
+  freedom_to_act: Record<string, string>;
+  magnitude: Record<string, string>;
+  impact_type: Record<string, string>;
+  non_quantitative_impact: Record<string, string>;
+}
+
+export interface PublicJobForm {
+  id: string;
+  token: string;
+  company_id?: string | null;
+  created_by_user_id?: string | null;
+  title: string;
+  recipient?: string | null;
+  status: "active" | "submitted" | "expired";
+  is_read: boolean;
+  position_id?: string | null;
+  created_at: string;
+  expires_at: string;
+  submitted_at?: string | null;
+}
+
+export interface PublicFormInfo {
+  title: string;
+  recipient?: string | null;
+  status: "active" | "submitted" | "expired";
+  expires_at: string;
+}
+
 // ── Gate 0 ────────────────────────────────────────────────────────────────────
 
 export interface GateCheck {
@@ -93,6 +209,8 @@ interface FactorEvidence {
   evidence: string[];
   doubts: string[];
   confidence: Confidence;
+  modifier_reason?: string | null;
+  adjacent_level?: string | null;
 }
 
 export interface KnowHowSelection extends FactorEvidence {
@@ -105,12 +223,14 @@ export interface KnowHowSelection extends FactorEvidence {
 export interface ProblemSolvingSelection extends FactorEvidence {
   area: string;
   complexity: number;
+  plus_minus: number;
 }
 
 export interface AccountabilitySelection extends FactorEvidence {
   freedom: string;
   magnitude: string;
-  impact: string;
+  impact?: string | null;
+  non_quantitative_impact?: string | null;
   plus_minus: number;
 }
 
@@ -130,6 +250,13 @@ export interface ScoreResult {
   /** Континуум P4…P1, L, A1…A4; «*» — вне допустимых пределов. */
   profile_long: string;
   grade: number;
+  grade_lower: number;
+  grade_mid: number;
+  grade_upper: number;
+  grade_zone: string;
+  grade_color: "blue" | "green" | "orange";
+  calculation_explanation: string[];
+  methodology_basis: string;
 }
 
 export interface QCFlag {
@@ -143,6 +270,8 @@ export interface QCFlag {
 export interface Evaluation {
   id?: string | null;
   position_id?: string | null;
+  company_id?: string | null;
+  created_by_user_id?: string | null;
   status: EvaluationStatus;
   gate: GateResult;
   selections?: FactorSelections | null;
@@ -159,7 +288,7 @@ export interface Evaluation {
 // ── View-модели ───────────────────────────────────────────────────────────────
 
 /** Статус должности на дашборде: нет оценки или статус последней оценки. */
-export type PositionStatus = "not_evaluated" | EvaluationStatus;
+export type PositionStatus = "draft_imported" | "not_evaluated" | EvaluationStatus;
 
 export interface PositionRow {
   id: string;
@@ -181,6 +310,7 @@ export const FACTOR_GROUP_LABEL: Record<FactorGroup, string> = {
 };
 
 export const STATUS_LABEL: Record<PositionStatus, string> = {
+  draft_imported: "Черновик из документа",
   not_evaluated: "Не оценена",
   ready: "Готово к комитету",
   needs_clarification: "Требуются уточнения",

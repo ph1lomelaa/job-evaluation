@@ -1,8 +1,4 @@
-"""Матрица грейдов и правило 15%.
-
-GRADE_MATRIX перенесена ДОСЛОВНО из раздела 8.2 инструкции
-(нижняя граница / среднее / верхняя граница / грейд) и является точной.
-"""
+"""Матрица Jobgrades из предоставленного XLSM и правило шага 15%."""
 
 from __future__ import annotations
 
@@ -51,13 +47,22 @@ GRADE_MATRIX: tuple[GradeBand, ...] = (
     GradeBand(29, 3581, 3915, 4250),
     GradeBand(30, 4251, 4655, 5060),
     GradeBand(31, 5061, 5540, 6020),
+    GradeBand(32, 6021, 6590, 7160),
+    GradeBand(33, 7161, 7740, 8320),
+    GradeBand(34, 8321, 8980, 9640),
+    GradeBand(35, 9641, 10410, 11180),
+    GradeBand(36, 11181, 12080, 12980),
+    GradeBand(37, 12981, 14030, 15080),
+    GradeBand(38, 15081, 16310, 17540),
 )
 
 
 def grade_for_points(points: int) -> int:
     """Грейд по суммарным баллам должности.
 
-    За пределами таблицы: ниже 0 → грейд 0, выше потолка → грейд 31.
+    За пределами числовой таблицы XLSM (XX) возвращается максимальный грейд 38,
+    так как доменная модель хранит числовой грейд; такой случай отдельно виден
+    по превышению ``grade_upper``.
     """
     if points <= GRADE_MATRIX[0].upper:
         return GRADE_MATRIX[0].grade
@@ -65,6 +70,24 @@ def grade_for_points(points: int) -> int:
         if band.lower <= points <= band.upper:
             return band.grade
     return GRADE_MATRIX[-1].grade
+
+
+def grade_band_for_points(points: int) -> GradeBand:
+    """Полный диапазон грейда для результата."""
+    return grade_band(grade_for_points(points))
+
+
+def grade_position(points: int, band: GradeBand) -> tuple[str, str]:
+    """Положение результата внутри диапазона и цвет для таблицы/карточки.
+
+    Нижняя, средняя и верхняя зоны разделены относительно midpoint. Цвета —
+    визуальная легенда приложения; сами границы и midpoint взяты из XLSM.
+    """
+    if points < band.mid:
+        return "Нижняя", "blue"
+    if points > band.mid:
+        return "Верхняя", "orange"
+    return "Средняя", "green"
 
 
 def grade_band(grade: int) -> GradeBand:
