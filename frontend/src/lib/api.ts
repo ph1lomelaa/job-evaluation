@@ -8,6 +8,7 @@ import type {
   DossierImportResult,
   Evaluation,
   FactorLevelReference,
+  FactorLevelRules,
   FactorSelections,
   GateResult,
   GradeBand,
@@ -111,6 +112,7 @@ export const api = {
     request<Company>(`/api/companies/${id}/activate`, { method: "POST" }),
   listGradeBands: () => request<GradeBand[]>("/api/reference/grades"),
   getFactorLevels: () => request<FactorLevelReference>("/api/reference/levels"),
+  getFactorLevelRules: () => request<FactorLevelRules>("/api/reference/level-rules"),
   calculateScore: (body: FactorSelections) =>
     request<ScoreResult>("/api/reference/calculate", {
       method: "POST",

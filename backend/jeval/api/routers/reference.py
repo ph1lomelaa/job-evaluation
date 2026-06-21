@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from ...domain.models import FactorSelections, ScoreResult
-from ...reference import factor_level_reference
+from ...reference import factor_level_reference, factor_level_rules
 from ...scoring import compute_score
 from ...scoring.grades import GRADE_MATRIX
 from ..deps import WorkspaceContext, workspace_context
@@ -34,3 +34,10 @@ def grade_reference() -> list[dict[str, int]]:
 def levels_reference() -> dict[str, dict[str, str]]:
     """Описания уровней подфакторов — единый источник для UI и промпта агента."""
     return factor_level_reference()
+
+
+@router.get("/level-rules")
+def level_rules_reference() -> dict[str, list[str]]:
+    """Калибровочные анти-паттерны по подфактору (раздел 9.4) — те же правила,
+    что уже идут в промпт агента, теперь доступные и эксперту-рецензенту в UI."""
+    return factor_level_rules()

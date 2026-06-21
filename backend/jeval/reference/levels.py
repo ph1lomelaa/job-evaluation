@@ -200,3 +200,24 @@ def factor_level_reference() -> dict[str, dict[str, str]]:
         "impact_type": IMPACT_TYPE,
         "non_quantitative_impact": NON_QUANTITATIVE_IMPACT,
     }
+
+
+def factor_level_rules() -> dict[str, list[str]]:
+    """Калибровочные анти-паттерны по подфактору — те же ``*_RULES``, что уже
+    идут в системный промпт агента (``build_levels_reference``), но раньше не
+    были доступны человеку-эксперту через API: их видела только модель, не
+    рецензент, проверяющий выбор модели. Ключи совпадают с
+    ``factor_level_reference()``, чтобы фронт мог сопоставить правило с тем же
+    подфактором, для которого показывает уровень.
+    """
+    return {
+        "specialized_know_how": list(SPECIALIZED_RULES),
+        "managerial_know_how": list(MANAGERIAL_RULES),
+        "communication": list(COMMUNICATION_RULES),
+        "problem_area": [PROBLEM_AREA_LOGIC],
+        "problem_complexity": list(PROBLEM_RULES),
+        "freedom_to_act": list(FREEDOM_RULES),
+        "magnitude": list(MAGNITUDE_RULES),
+        "impact_type": list(IMPACT_RULES),
+        "non_quantitative_impact": [],
+    }

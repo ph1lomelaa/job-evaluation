@@ -166,6 +166,11 @@ export interface FactorLevelReference {
   non_quantitative_impact: Record<string, string>;
 }
 
+// Калибровочные анти-паттерны по подфактору (jeval/reference/levels.py,
+// *_RULES) — те же ключи, что и FactorLevelReference. Раньше шли только в
+// промпт агента, теперь доступны и эксперту-рецензенту в UI.
+export type FactorLevelRules = Record<keyof FactorLevelReference, string[]>;
+
 export interface PublicJobForm {
   id: string;
   token: string;

@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, ErrorBanner, Skeleton, StatusDot } from "../components/ui";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
-import { useFactorLevelReference } from "../lib/factorLevels";
+import { useFactorLevelReference, useFactorLevelRules } from "../lib/factorLevels";
 import {
   factorCodes,
   groupEvidence,
@@ -22,6 +22,7 @@ import {
   type Evaluation,
   type FactorGroup,
   type FactorLevelReference,
+  type FactorLevelRules,
   type JobDossier,
   type QCStatus,
   type ScoreResult,
@@ -37,6 +38,18 @@ const EMPTY_FACTOR_LEVELS: FactorLevelReference = {
   magnitude: {},
   impact_type: {},
   non_quantitative_impact: {},
+};
+
+const EMPTY_FACTOR_RULES: FactorLevelRules = {
+  specialized_know_how: [],
+  managerial_know_how: [],
+  communication: [],
+  problem_area: [],
+  problem_complexity: [],
+  freedom_to_act: [],
+  magnitude: [],
+  impact_type: [],
+  non_quantitative_impact: [],
 };
 
 const CONF_DOT: Record<Confidence, Parameters<typeof StatusDot>[0]["color"]> = {
@@ -442,9 +455,10 @@ function DossierPreview({ position }: { position: JobDossier }) {
 
 function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: ScoreResult }) {
   const { data: levels } = useFactorLevelReference();
+  const { data: levelRules } = useFactorLevelRules();
   const groups: FactorGroup[] = ["know_how", "problem_solving", "accountability"];
   const codes = factorCodes(score);
-  const rows = subfactorRows(score, levels ?? EMPTY_FACTOR_LEVELS);
+  const rows = subfactorRows(score, levels ?? EMPTY_FACTOR_LEVELS, levelRules ?? EMPTY_FACTOR_RULES);
   const evidence = groupEvidence(score);
   const points: Record<FactorGroup, number> = {
     know_how: score.know_how.points,
@@ -730,6 +744,18 @@ function FactorGroupBlock({
               <span className="font-semibold text-[rgb(var(--fg)/0.72)]">Проверочный вопрос: </span>
               {r.expertCheck}
             </p>
+            {r.rules.length > 0 && (
+              <details className="mt-2 max-w-4xl text-xs leading-5 text-muted">
+                <summary className="cursor-pointer font-semibold text-[rgb(var(--fg)/0.72)]">
+                  На что обратить внимание
+                </summary>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4">
+                  {r.rules.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
           <span className="num mt-0.5 min-w-10 rounded-lg border border-[#d9d4cd] bg-[#f8f6f2] px-2.5 py-1 text-center text-sm font-semibold dark:border-white/10 dark:bg-white/5">
             {r.level}

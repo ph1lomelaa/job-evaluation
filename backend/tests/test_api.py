@@ -42,6 +42,19 @@ def test_reference_calculator(client):
     assert score["profile_long"] == "A4"
 
 
+def test_level_rules_reference_keys_match_levels_reference(client):
+    """UX P0.3: калибровочные правила должны быть доступны для тех же
+    подфакторов, что и сами описания уровней — иначе фронт не сможет
+    сопоставить правило с нужным факторным блоком."""
+    levels = client.get("/api/reference/levels")
+    rules = client.get("/api/reference/level-rules")
+    assert levels.status_code == 200
+    assert rules.status_code == 200
+    assert set(levels.json().keys()) == set(rules.json().keys())
+    assert all(isinstance(v, list) for v in rules.json().values())
+    assert rules.json()["managerial_know_how"]  # непустой список правил
+
+
 def test_create_list_get_position(client, full_dossier):
     body = full_dossier.model_dump(mode="json", exclude_none=True)
     body.pop("id", None)

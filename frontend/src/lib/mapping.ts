@@ -5,6 +5,7 @@ import type {
   Evaluation,
   FactorGroup,
   FactorLevelReference,
+  FactorLevelRules,
   JobDossier,
   PositionRow,
   ScoreResult,
@@ -57,47 +58,71 @@ export interface SubfactorRow {
   level: string;
   description: string;
   expertCheck: string;
+  rules: string[];
 }
+
+const NO_RULES: string[] = [];
 
 function detail(
   name: string,
   level: string,
   levels: Record<string, string>,
   expertCheck: string,
+  rules: string[] = NO_RULES,
 ): SubfactorRow {
-  return { name, level, description: levels[level] ?? "Описание уровня отсутствует.", expertCheck };
+  return {
+    name,
+    level,
+    description: levels[level] ?? "Описание уровня отсутствует.",
+    expertCheck,
+    rules,
+  };
 }
 
 /** Строки подфакторов для факторной таблицы (уровни — по группам).
  * Тексты уровней приходят с backend (`GET /api/reference/levels`) — тот же
- * справочник, что и в системном промпте агента, без отдельной копии на фронте. */
-export function subfactorRows(score: ScoreResult, levels: FactorLevelReference): Record<FactorGroup, SubfactorRow[]> {
+ * справочник, что и в системном промпте агента, без отдельной копии на фронте.
+ * `rules` (`GET /api/reference/level-rules`) — те же калибровочные анти-
+ * паттерны, что видит агент в промпте, теперь видимые и эксперту-рецензенту. */
+export function subfactorRows(
+  score: ScoreResult,
+  levels: FactorLevelReference,
+  rules: FactorLevelRules,
+): Record<FactorGroup, SubfactorRow[]> {
   const kh = score.know_how.selection;
   const ps = score.problem_solving.selection;
   const acc = score.accountability.selection;
   return {
     know_how: [
       detail("Специальные / практические знания", kh.specialization, levels.specialized_know_how,
-        "Какая глубина и широта знаний действительно необходима для стандартного выполнения роли, независимо от диплома и стажа работника?"),
+        "Какая глубина и широта знаний действительно необходима для стандартного выполнения роли, независимо от диплома и стажа работника?",
+        rules.specialized_know_how),
       detail("Планирование, организация и интеграция", kh.management, levels.managerial_know_how,
-        "Сколько разных процессов или функций роль должна интегрировать и какие компромиссы между ними принимает?"),
+        "Сколько разных процессов или функций роль должна интегрировать и какие компромиссы между ними принимает?",
+        rules.managerial_know_how),
       detail("Коммуникации и воздействие", kh.communication, levels.communication,
-        "Роль только передаёт информацию, рационально убеждает или должна менять позицию людей при реальном сопротивлении?"),
+        "Роль только передаёт информацию, рационально убеждает или должна менять позицию людей при реальном сопротивлении?",
+        rules.communication),
     ],
     problem_solving: [
       detail("Область решаемых вопросов / свобода мышления", ps.area, levels.problem_area,
-        "Насколько правила, процедуры, политики и помощь заранее определяют, что и как должна решать роль?"),
+        "Насколько правила, процедуры, политики и помощь заранее определяют, что и как должна решать роль?",
+        rules.problem_area),
       detail("Сложность решаемых вопросов", String(ps.complexity), levels.problem_complexity,
-        "Насколько решения повторяются и какие типовые кейсы подтверждают необходимость адаптации, синтеза или новых концепций?"),
+        "Насколько решения повторяются и какие типовые кейсы подтверждают необходимость адаптации, синтеза или новых концепций?",
+        rules.problem_complexity),
     ],
     accountability: [
       detail("Свобода действий", acc.freedom, levels.freedom_to_act,
-        "Какие решения роль принимает сама, что согласует, как контролируется результат и через какой период видны последствия?"),
+        "Какие решения роль принимает сама, что согласует, как контролируется результат и через какой период видны последствия?",
+        rules.freedom_to_act),
       detail("Ветка величины", acc.magnitude, levels.magnitude,
-        "В KMG DIGITAL используется N: доход, выручка и денежные диапазоны не участвуют в оценке."),
+        "В KMG DIGITAL используется N: доход, выручка и денежные диапазоны не участвуют в оценке.",
+        rules.magnitude),
       detail("Неколичественный уровень воздействия", acc.non_quantitative_impact ?? acc.impact ?? "—",
         acc.non_quantitative_impact ? levels.non_quantitative_impact : levels.impact_type,
-        "Каков реальный организационный охват роли: отдельная услуга, подразделение, несколько функций, критичная система, команды или политика всей организации?"),
+        "Каков реальный организационный охват роли: отдельная услуга, подразделение, несколько функций, критичная система, команды или политика всей организации?",
+        acc.non_quantitative_impact ? rules.non_quantitative_impact : rules.impact_type),
     ],
   };
 }
