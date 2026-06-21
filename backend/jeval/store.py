@@ -417,6 +417,12 @@ class SqliteStore:
                 );
                 """
             )
+            # Commit перед inspect(): inspect() открывает СВОЁ соединение из пула
+            # движка, а не использует `conn` — на Postgres (READ COMMITTED) только
+            # что созданные таблицы из ещё не закоммиченной транзакции `conn` в нём
+            # не видны (NoSuchTableError). На SQLite это маскировалось тем, что DDL
+            # там обычно коммитится сразу же на уровне драйвера.
+            conn.commit()
             for table, columns in {
                 "positions": {
                     "company_id": "TEXT",
