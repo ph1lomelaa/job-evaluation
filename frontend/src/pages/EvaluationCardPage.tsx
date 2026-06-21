@@ -493,6 +493,9 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
             evidence={evidence[g].evidence}
             doubts={evidence[g].doubts}
             confidence={evidence[g].confidence}
+            plusMinus={evidence[g].plusMinus}
+            modifierReason={evidence[g].modifierReason}
+            adjacentLevel={evidence[g].adjacentLevel}
           />
         ))}
       </Card>
@@ -673,6 +676,9 @@ function FactorGroupBlock({
   evidence,
   doubts,
   confidence,
+  plusMinus,
+  modifierReason,
+  adjacentLevel,
 }: {
   label: string;
   hint: string;
@@ -682,8 +688,12 @@ function FactorGroupBlock({
   evidence: string[];
   doubts: string[];
   confidence: Confidence;
+  plusMinus: number;
+  modifierReason: string | null;
+  adjacentLevel: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const hasModifier = plusMinus !== 0;
   return (
     <div className="border-t border-[rgb(var(--row-divider))] first:border-t-0">
       <button
@@ -702,7 +712,9 @@ function FactorGroupBlock({
             {evidence.length} {factWord(evidence.length)} · {doubts.length} {doubtWord(doubts.length)}
           </span>
         </span>
-        <span className="num w-4 text-center text-muted">{open ? "−" : "+"}</span>
+        {/* Шеврон сворачивания — не "+/−": этот же символ выше в коде факторов
+            означает методологический модификатор границы, нельзя путать. */}
+        <span className={cn("mt-1 w-4 text-center text-muted transition-transform", open && "rotate-180")}>▾</span>
       </button>
       {rows.map((r) => (
         <div
@@ -746,6 +758,28 @@ function FactorGroupBlock({
                       <li key={d}>{d}</li>
                     ))}
                   </ul>
+                </>
+              )}
+              {hasModifier && (
+                <>
+                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
+                    Почему именно {plusMinus > 0 ? "+" : "−"} (граничный модификатор)
+                  </div>
+                  {modifierReason || adjacentLevel ? (
+                    <p className="text-[rgb(var(--fg)/0.82)]">
+                      {adjacentLevel && (
+                        <>
+                          Сравнивали с соседней ячейкой <span className="num font-semibold">{adjacentLevel}</span>.{" "}
+                        </>
+                      )}
+                      {modifierReason || "Причина границы не указана текстом."}
+                    </p>
+                  ) : (
+                    <p className="text-warn">
+                      Модификатор применён, но эксперт/агент не указал ни соседний уровень, ни причину
+                      границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
+                    </p>
+                  )}
                 </>
               )}
             </div>

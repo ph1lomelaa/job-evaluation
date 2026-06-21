@@ -102,7 +102,16 @@ export function subfactorRows(score: ScoreResult, levels: FactorLevelReference):
   };
 }
 
-export function groupEvidence(score: ScoreResult): Record<FactorGroup, { evidence: string[]; doubts: string[]; confidence: Confidence }> {
+export interface GroupEvidence {
+  evidence: string[];
+  doubts: string[];
+  confidence: Confidence;
+  plusMinus: number;
+  modifierReason: string | null;
+  adjacentLevel: string | null;
+}
+
+export function groupEvidence(score: ScoreResult): Record<FactorGroup, GroupEvidence> {
   return {
     know_how: pick(score.know_how.selection),
     problem_solving: pick(score.problem_solving.selection),
@@ -110,8 +119,22 @@ export function groupEvidence(score: ScoreResult): Record<FactorGroup, { evidenc
   };
 }
 
-function pick(s: { evidence: string[]; doubts: string[]; confidence: Confidence }) {
-  return { evidence: s.evidence, doubts: s.doubts, confidence: s.confidence };
+function pick(s: {
+  evidence: string[];
+  doubts: string[];
+  confidence: Confidence;
+  plus_minus: number;
+  modifier_reason?: string | null;
+  adjacent_level?: string | null;
+}): GroupEvidence {
+  return {
+    evidence: s.evidence,
+    doubts: s.doubts,
+    confidence: s.confidence,
+    plusMinus: s.plus_minus,
+    modifierReason: s.modifier_reason ?? null,
+    adjacentLevel: s.adjacent_level ?? null,
+  };
 }
 
 // ── Форматирование ────────────────────────────────────────────────────────────
