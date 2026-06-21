@@ -25,6 +25,8 @@ IC / PTSIC / FINALITE — это просто способ записи Excel-ф
 `tables.py` реализует те же формулы в 0-based индексации (см. там же).
 """
 
+import pytest
+
 from jeval.scoring import tables
 
 
@@ -102,6 +104,37 @@ def test_accountability_d3c_matches_finalite_macro():
     VLOOKUP(23,pas_hay,2) -> 'macro d''éval'!A24=23, B24=100. Аудитный пример D/3/C.
     """
     assert tables.accountability_points("D", "3", impact="C") == 100
+
+
+def test_accountability_points_requires_impact_for_quantitative_branch():
+    """Без impact и без non_quantitative_impact для количественного Magnitude
+
+    (1-4) формула не определена — функция должна явно отказать, а не молча
+    посчитать что-то по ``_MAG_INDEX`` (там у "N" тоже есть индекс 0)."""
+    with pytest.raises(ValueError, match="R/C/S/P"):
+        tables.accountability_points("D", "3")
+
+
+def test_accountability_points_requires_level_for_non_quantitative_branch():
+    """То же для Magnitude=N без non_quantitative_impact: ветка I-VI обязательна."""
+    with pytest.raises(ValueError, match="I–VI"):
+        tables.accountability_points("D", "N")
+
+
+def test_series_index_of_exact_match():
+    assert tables.series_index_of(304) == 30
+
+
+def test_series_index_of_nearest_match_fallback():
+    """Fallback недостижим из живого пути (см. docstring ``series_index_of``):
+
+    ``problem_solving_points`` всегда передаёт значение Know-How, которое само
+    вернула ``know_how_points`` той же версии таблиц, то есть уже есть в ряду.
+    303 искусственно выбрано как число между 304 (idx 30) и 264 (idx 29) —
+    ближе к 304, поэтому fallback должен вернуть индекс 304, а не упасть.
+    """
+    assert 303 not in tables.HAY_SERIES
+    assert tables.series_index_of(303) == tables.series_index_of(304) == 30
 
 
 def test_accountability_non_quantitative_matches_finalite_macro():

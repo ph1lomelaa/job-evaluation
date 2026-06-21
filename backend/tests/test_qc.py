@@ -1,6 +1,16 @@
 """Тесты движка QC-флагов."""
 
-from jeval.domain.enums import ImpactType, QCStatus
+from jeval.domain.enums import (
+    Communication,
+    FreedomToAct,
+    ImpactType,
+    Magnitude,
+    ManagerialKnowHow,
+    ProblemArea,
+    ProblemComplexity,
+    QCStatus,
+    SpecializedKnowHow,
+)
 from jeval.qc import run_qc
 from jeval.scoring import compute_score
 
@@ -56,3 +66,70 @@ def test_impact_s_with_joint_result_passes(full_dossier, sample_output):
     score = compute_score(sample_output.selections)
     flags = run_qc(full_dossier, sample_output.selections, score)
     assert _flag(flags, "impact_s_requires_joint_kpi").status == QCStatus.PASS
+
+
+# ── WARN-ветки раздела 9.4, ранее не покрытые тестами ────────────────────────
+
+
+def test_comm3_without_resistance_cases_warns(full_dossier, sample_output):
+    sample_output.selections.know_how.communication = Communication.THREE
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "comm3_needs_resistance").status == QCStatus.WARN
+
+
+def test_low_kh_high_mgmt_warns(full_dossier, sample_output):
+    sample_output.selections.know_how.specialization = SpecializedKnowHow.B
+    sample_output.selections.know_how.management = ManagerialKnowHow.III
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "low_kh_high_mgmt").status == QCStatus.WARN
+
+
+def test_easy_area_high_complexity_warns(full_dossier, sample_output):
+    sample_output.selections.problem_solving.area = ProblemArea.A
+    sample_output.selections.problem_solving.complexity = ProblemComplexity.ADAPTIVE
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "easy_area_high_complexity").status == QCStatus.WARN
+
+
+def test_high_complexity_few_cases_warns(full_dossier, sample_output):
+    sample_output.selections.problem_solving.complexity = ProblemComplexity.ADAPTIVE
+    full_dossier.problem_cases = full_dossier.problem_cases[:2]  # < 3 типовых кейсов
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "high_complexity_few_cases").status == QCStatus.WARN
+
+
+def test_low_freedom_primary_impact_warns(full_dossier, sample_output):
+    sample_output.selections.accountability.freedom = FreedomToAct.A
+    sample_output.selections.accountability.magnitude = Magnitude.ONE
+    sample_output.selections.accountability.impact = ImpactType.P
+    sample_output.selections.accountability.non_quantitative_impact = None
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "low_freedom_primary_impact").status == QCStatus.WARN
+
+
+def test_high_freedom_low_thinking_warns(full_dossier, sample_output):
+    sample_output.selections.accountability.freedom = FreedomToAct.G
+    sample_output.selections.problem_solving.area = ProblemArea.B
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "high_freedom_low_thinking").status == QCStatus.WARN
+
+
+def test_profile_out_of_range_warns(full_dossier, sample_output):
+    # Огромный разрыв Accountability/Problem Solving: H/4/P против A/1 —
+    # больше PROFILE_MAX_STEPS=4 шагов по 15%.
+    sample_output.selections.problem_solving.area = ProblemArea.A
+    sample_output.selections.problem_solving.complexity = ProblemComplexity.REPETITIVE
+    sample_output.selections.accountability.freedom = FreedomToAct.H
+    sample_output.selections.accountability.magnitude = Magnitude.FOUR
+    sample_output.selections.accountability.impact = ImpactType.P
+    sample_output.selections.accountability.non_quantitative_impact = None
+    score = compute_score(sample_output.selections)
+    assert score.profile_steps > 4
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "profile_out_of_range").status == QCStatus.WARN
