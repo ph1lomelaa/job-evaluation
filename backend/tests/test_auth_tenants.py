@@ -264,6 +264,9 @@ def test_google_callback_denies_non_allowlisted_email(monkeypatch):
     monkeypatch.setattr(settings, "jeval_google_client_id", "client-id", raising=False)
     monkeypatch.setattr(settings, "jeval_google_client_secret", "client-secret", raising=False)
     monkeypatch.setattr(settings, "jeval_frontend_url", "http://frontend.local", raising=False)
+    # Явно фиксируем гейт включённым независимо от локального .env разработчика
+    # (JEVAL_DISABLE_ACCESS_GATE может быть true на машине, где это запускается).
+    monkeypatch.setattr(settings, "jeval_disable_access_gate", False, raising=False)
 
     client = TestClient(create_app(store=InMemoryStore(), auth_required=True))
     monkeypatch.setattr(
@@ -282,7 +285,12 @@ def test_google_callback_denies_non_allowlisted_email(monkeypatch):
 
 
 def test_access_gate_disabled_by_default():
-    assert get_settings().jeval_disable_access_gate is False
+    """Проверяем дефолт ПОЛЯ в Settings, а не текущий get_settings() — последний
+    читает локальный .env разработчика, где JEVAL_DISABLE_ACCESS_GATE временно
+    может быть true (см. .env.example: пометка "ВРЕМЕННО для разработки")."""
+    from jeval.config import Settings
+
+    assert Settings.model_fields["jeval_disable_access_gate"].default is False
 
 
 def test_disable_access_gate_lets_new_google_user_in_without_invite(monkeypatch):

@@ -180,3 +180,15 @@ def test_full_control_row_from_evaluation_template():
     assert score.total_points == 890
     assert score.grade == 21
     assert score.profile_long == "A1"
+
+
+def test_calculation_explanation_avoids_internal_function_jargon(sample_output):
+    """UX-аудит: эксперт без техфона не должен видеть имена Excel-макросов
+    (COMP/IC/PTSIC/FINALITE) как "объяснение" того, почему получился балл —
+    только методологические термины (подстановочная таблица, шаг ряда Hay)."""
+    score = compute_score(sample_output.selections)
+    jargon = ("COMP", "PTSIC", "FINALITE", "XLSM", " IC ")
+    explanation_text = " ".join(score.calculation_explanation)
+    for term in jargon:
+        assert term not in explanation_text, f"{term!r} просочился в объяснение для эксперта"
+    assert "подстановочной таблице" in explanation_text or "таблице пересечения" in explanation_text

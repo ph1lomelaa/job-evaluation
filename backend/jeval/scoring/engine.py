@@ -9,6 +9,7 @@ from __future__ import annotations
 from ..domain.enums import Profile
 from ..domain.models import (
     AccountabilityResult,
+    AccountabilitySelection,
     FactorSelections,
     KnowHowResult,
     ProblemSolvingResult,
@@ -106,22 +107,38 @@ def compute_score(
         grade_zone=zone,
         grade_color=color,
         calculation_explanation=[
-            f"Know-How {kh.specialization.value}/{kh.management.value}/{kh.communication.value}"
-            f"{_pm(kh.plus_minus)} = {kh_points} баллов по COMP из XLSM.",
-            f"Problem Solving {ps.area.value}/{ps.complexity.value}{_pm(ps.plus_minus)} = "
-            f"{ps_percent}% от Know-How = {ps_points} баллов по IC/PTSIC.",
-            f"Accountability {acc.freedom.value}/{acc.magnitude.value}/"
-            f"{(acc.non_quantitative_impact or acc.impact).value}"
-            f"{_pm(acc.plus_minus)} = {acc_points} баллов по FINALITE.",
-            f"Итого {kh_points} + {ps_points} + {acc_points} = {total}; "
-            f"грейд {band.grade}, диапазон {band.lower}–{band.upper}, {zone.lower()} зона.",
+            f"1. Знания и умения (Know-How): специальные знания {kh.specialization.value}, "
+            f"управленческие знания {kh.management.value}, коммуникации "
+            f"{kh.communication.value}{_pm(kh.plus_minus)} вместе определяют одну ячейку в "
+            f"подстановочной таблице Know-How → {kh_points} баллов.",
+            f"2. Решение вопросов (Problem Solving): область {ps.area.value} и сложность "
+            f"{ps.complexity.value}{_pm(ps.plus_minus)} по таблице пересечения дают "
+            f"{ps_percent}% — именно от Know-How ({kh_points} баллов). Итоговые "
+            f"{ps_points} баллов взяты по шагам геометрического ряда Hay (шаг ≈15%), "
+            f"а не прямым умножением {ps_percent}% × {kh_points} — поэтому простое "
+            "умножение в столбик даст немного другое число.",
+            f"3. Ответственность (Accountability): свобода действий {acc.freedom.value}, "
+            f"{_accountability_branch_text(acc)} по таблице пересечения дают "
+            f"{acc_points} баллов.",
+            f"4. Итог: {kh_points} (Know-How) + {ps_points} (Problem Solving) + "
+            f"{acc_points} (Accountability) = {total} баллов → грейд {band.grade} "
+            f"(диапазон {band.lower}–{band.upper}, {zone.lower()} зона).",
         ],
         methodology_basis=(
-            f"Таблицы Hay {table_set.table_version} (сверено {table_set.verified_date}): "
-            f"{table_set.source}."
+            f"Баллы рассчитаны по подстановочным таблицам Hay Group (версия "
+            f"{table_set.table_version}, сверена {table_set.verified_date}) — официальным "
+            f"таблицам пересечения уровней методики, а не произвольной оценкой на глаз. "
+            f"Первоисточник для аудита: {table_set.source}."
         ),
         table_version=table_set.table_version,
     )
+
+
+def _accountability_branch_text(acc: AccountabilitySelection) -> str:
+    modifier = _pm(acc.plus_minus)
+    if acc.magnitude.value == "N" and acc.non_quantitative_impact is not None:
+        return f"неколичественный уровень воздействия {acc.non_quantitative_impact.value}{modifier}"
+    return f"величина {acc.magnitude.value} и тип влияния {acc.impact.value if acc.impact else '—'}{modifier}"
 
 
 def _pm(value: int) -> str:
