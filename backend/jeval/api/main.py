@@ -8,6 +8,7 @@ middleware, общее состояние приложения (store/evaluator/
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import FastAPI
@@ -18,6 +19,8 @@ from ..orchestrator import JobEvaluator
 from ..store import Store, build_store
 from .deps import configure_rate_limits, now
 from .routers import admin, auth, companies, evaluations, positions, public_forms, reference
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(
@@ -31,6 +34,11 @@ def create_app(
     тесты передают `auth_required=True`; runtime по умолчанию защищён.
     """
     settings = get_settings()
+    if settings.jeval_disable_access_gate:
+        logger.warning(
+            "ACCESS GATE DISABLED — DEV ONLY: JEVAL_DISABLE_ACCESS_GATE=1 пропускает "
+            "allowlist-проверку при первом входе через Google. Не использовать в проде."
+        )
     app = FastAPI(title="Платформа оценки должностей (Hay Group)", version="0.2.0")
     app.state.settings = settings
     app.add_middleware(

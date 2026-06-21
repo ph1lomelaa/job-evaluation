@@ -281,6 +281,42 @@ def test_google_callback_denies_non_allowlisted_email(monkeypatch):
     assert "auth_error=access_denied" in callback.headers["location"]
 
 
+def test_access_gate_disabled_by_default():
+    assert get_settings().jeval_disable_access_gate is False
+
+
+def test_disable_access_gate_lets_new_google_user_in_without_invite(monkeypatch):
+    """ВРЕМЕННО для разработки: JEVAL_DISABLE_ACCESS_GATE=1 пропускает allowlist —
+    новый Google-пользователь без приглашения и без существующей компании всё
+    равно логинится (как при обычной email/password-регистрации)."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "jeval_google_enabled", True, raising=False)
+    monkeypatch.setattr(settings, "jeval_google_client_id", "client-id", raising=False)
+    monkeypatch.setattr(settings, "jeval_google_client_secret", "client-secret", raising=False)
+    monkeypatch.setattr(settings, "jeval_frontend_url", "http://frontend.local", raising=False)
+    monkeypatch.setattr(settings, "jeval_disable_access_gate", True, raising=False)
+
+    client = TestClient(create_app(store=InMemoryStore(), auth_required=True))
+    monkeypatch.setattr(
+        auth_router,
+        "_fetch_google_profile",
+        lambda **kwargs: {"email": "no-invite@gmail.com", "sub": "google-sub-3", "name": "No Invite"},
+    )
+
+    client.get("/api/auth/google/start", follow_redirects=False)
+    state = client.cookies.get("jeval_google_state")
+    assert state
+
+    callback = client.get(f"/api/auth/google/callback?code=code-3&state={state}", follow_redirects=False)
+    assert callback.status_code == 302
+    assert callback.headers["location"] == "http://frontend.local/"
+
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["user"]["email"] == "no-invite@gmail.com"
+    assert me.json()["companies"] == []  # как при обычной регистрации — без приглашения
+
+
 def test_old_sqlite_documents_are_migrated_to_first_company(tmp_path, full_dossier):
     path = tmp_path / "legacy.db"
     dossier = full_dossier.model_copy(deep=True)

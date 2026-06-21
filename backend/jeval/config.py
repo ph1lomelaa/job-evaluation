@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     jeval_google_enabled: bool = False
     jeval_google_redirect_uri: str = "http://127.0.0.1:8000/api/auth/google/callback"
 
+    # ВРЕМЕННО для разработки, не включать в проде: пропускает allowlist-проверку
+    # (приглашение/существующая компания) при первом входе через Google в
+    # google_callback() — новый пользователь логинится без приглашения. RBAC
+    # внутри приложения (роли owner/admin/evaluator/viewer) при этом не меняется —
+    # это только про допуск к созданию аккаунта, не про права после входа.
+    # Откатывается одной переменной: по умолчанию False.
+    jeval_disable_access_gate: bool = False
+
     # CORS: разрешённые origin'ы фронтенда (regex). Дефолт — только localhost для
     # разработки; в проде задайте реальный домен через переменную окружения.
     jeval_cors_origin_regex: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
