@@ -24,6 +24,7 @@ import {
   type FactorLevelReference,
   type FactorLevelRules,
   type JobDossier,
+  type QCFlag,
   type QCStatus,
   type ScoreResult,
 } from "../lib/types";
@@ -465,6 +466,13 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
     problem_solving: score.problem_solving.points,
     accountability: score.accountability.points,
   };
+  // QC P1.4: показать предупреждение прямо на том факторном блоке, которого
+  // оно касается (по QCFlag.factor_groups), а не только в общей карточке QC.
+  const qcByGroup: Record<FactorGroup, QCFlag[]> = {
+    know_how: evaluation.qc_flags.filter((f) => f.factor_groups.includes("know_how") && f.status !== "pass"),
+    problem_solving: evaluation.qc_flags.filter((f) => f.factor_groups.includes("problem_solving") && f.status !== "pass"),
+    accountability: evaluation.qc_flags.filter((f) => f.factor_groups.includes("accountability") && f.status !== "pass"),
+  };
 
   return (
     <>
@@ -510,6 +518,7 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
             plusMinus={evidence[g].plusMinus}
             modifierReason={evidence[g].modifierReason}
             adjacentLevel={evidence[g].adjacentLevel}
+            qcFlags={qcByGroup[g]}
           />
         ))}
       </Card>
@@ -693,6 +702,7 @@ function FactorGroupBlock({
   plusMinus,
   modifierReason,
   adjacentLevel,
+  qcFlags,
 }: {
   label: string;
   hint: string;
@@ -705,9 +715,12 @@ function FactorGroupBlock({
   plusMinus: number;
   modifierReason: string | null;
   adjacentLevel: string | null;
+  qcFlags: QCFlag[];
 }) {
   const [open, setOpen] = useState(false);
   const hasModifier = plusMinus !== 0;
+  const failCount = qcFlags.filter((f) => f.status === "fail").length;
+  const warnCount = qcFlags.filter((f) => f.status === "warn").length;
   return (
     <div className="border-t border-[rgb(var(--row-divider))] first:border-t-0">
       <button
@@ -718,6 +731,12 @@ function FactorGroupBlock({
           <span className="block text-xs font-semibold uppercase tracking-wide text-[rgb(var(--fg)/0.82)]">{label}</span>
           <span className="mt-1 block text-xs text-muted">{hint}</span>
         </span>
+        {(failCount > 0 || warnCount > 0) && (
+          <span className="mt-0.5 flex items-center gap-1.5 text-xs" title="QC-замечания по этому фактору — см. ниже">
+            {failCount > 0 && <span className="num font-semibold text-accent">✗ {failCount}</span>}
+            {warnCount > 0 && <span className="num font-semibold text-warn">⚠ {warnCount}</span>}
+          </span>
+        )}
         <span className="num text-sm text-muted">{code}</span>
         <span className="num w-16 text-right text-sm font-semibold">{points}</span>
         <span className="w-24 text-right text-sm text-muted">
@@ -806,6 +825,18 @@ function FactorGroupBlock({
                       границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
                     </p>
                   )}
+                </>
+              )}
+              {qcFlags.length > 0 && (
+                <>
+                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
+                    QC-замечания по этому фактору
+                  </div>
+                  <ul className="space-y-3">
+                    {qcFlags.map((flag) => (
+                      <QcItem key={flag.code} flag={flag} />
+                    ))}
+                  </ul>
                 </>
               )}
             </div>

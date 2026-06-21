@@ -133,3 +133,24 @@ def test_profile_out_of_range_warns(full_dossier, sample_output):
     assert score.profile_steps > 4
     flags = run_qc(full_dossier, sample_output.selections, score)
     assert _flag(flags, "profile_out_of_range").status == QCStatus.WARN
+
+
+# ── factor_groups: UI P1.4 привязывает QC-флаг к нужному факторному блоку ────
+
+
+def test_flags_carry_factor_groups_for_ui_linking(full_dossier, sample_output):
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "accountability_non_quantitative_policy").factor_groups == ["accountability"]
+    # Не привязан к конкретному фактору — про резюме роли целиком.
+    assert _flag(flags, "person_not_role").factor_groups == []
+
+
+def test_high_freedom_low_thinking_spans_two_factor_groups(full_dossier, sample_output):
+    sample_output.selections.accountability.freedom = FreedomToAct.G
+    sample_output.selections.problem_solving.area = ProblemArea.B
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert set(_flag(flags, "high_freedom_low_thinking").factor_groups) == {
+        "accountability", "problem_solving",
+    }

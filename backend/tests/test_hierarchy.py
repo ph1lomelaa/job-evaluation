@@ -108,6 +108,7 @@ def test_subordinate_not_above_manager(full_dossier, sample_output):
     )
     f = _flag(flags, "subordinate_not_above_manager")
     assert f is not None and f.status == QCStatus.WARN
+    assert f.factor_groups == ["know_how"]
 
 
 def test_subordinate_below_manager_passes(full_dossier, sample_output):

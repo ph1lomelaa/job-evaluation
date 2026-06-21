@@ -271,6 +271,7 @@ export interface QCFlag {
   status: QCStatus;
   message: string;
   recommendation: string;
+  factor_groups: string[];
 }
 
 export interface Evaluation {

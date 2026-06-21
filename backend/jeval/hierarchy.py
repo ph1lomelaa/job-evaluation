@@ -40,8 +40,14 @@ def _find_peer(
     return None
 
 
-def _flag(code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str) -> QCFlag:
-    return QCFlag(code=code, severity=sev, status=status, message=msg, recommendation=rec)
+def _flag(
+    code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str,
+    factors: tuple[str, ...] = (),
+) -> QCFlag:
+    return QCFlag(
+        code=code, severity=sev, status=status, message=msg, recommendation=rec,
+        factor_groups=list(factors),
+    )
 
 
 def _table_version_mismatch_flag(
@@ -94,6 +100,7 @@ def run_hierarchy_qc(
                     "—" if ok
                     else "Нужно сильное матричное/экспертное обоснование, иначе пересмотреть "
                     "управленческий уровень (раздел 9.5).",
+                    factors=("know_how",),
                 )
             )
 
@@ -132,6 +139,7 @@ def run_hierarchy_qc(
                     "Проверить традиционность или матричность структуры и обосновать исключение; "
                     "более глубокие специальные знания эксперта сами по себе не являются ошибкой."
                     if conflicts else "—",
+                    factors=("know_how", "problem_solving", "accountability"),
                 )
             )
 

@@ -62,8 +62,14 @@ def _selection_text(sel: FactorSelections) -> str:
     return " ".join(chunks).lower()
 
 
-def _flag(code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str) -> QCFlag:
-    return QCFlag(code=code, severity=sev, status=status, message=msg, recommendation=rec)
+def _flag(
+    code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str,
+    factors: tuple[str, ...] = (),
+) -> QCFlag:
+    return QCFlag(
+        code=code, severity=sev, status=status, message=msg, recommendation=rec,
+        factor_groups=list(factors),
+    )
 
 
 def _marker_pattern(marker: str) -> re.Pattern[str]:
@@ -115,6 +121,7 @@ def run_qc(
                     ),
                     "Указать соседнюю ячейку и факты: для '+' — что выше базы, но ниже "
                     "следующего уровня; для '−' — что базовый уровень достигнут лишь по нижней границе.",
+                    factors=(factor_code,),
                 )
             )
 
@@ -132,6 +139,7 @@ def run_qc(
             ),
             "Не использовать доход, выручку или денежные диапазоны; выбрать N и подтвердить "
             "организационный уровень воздействия I–VI.",
+            factors=("accountability",),
         )
     )
 
@@ -172,6 +180,7 @@ def run_qc(
                 else "Тип влияния P без KPI результата и/или ресурсного рычага",
                 "Для P нужны KPI результата и управление ресурсами (люди/бюджет/лимиты). "
                 "Иначе понизить до S или C.",
+                factors=("accountability",),
             )
         )
 
@@ -193,6 +202,7 @@ def run_qc(
                 else "Тип влияния S не подтверждён совместным результатом или разделённой ответственностью",
                 "Указать общий конечный результат, других совладельцев и границы ответственности; "
                 "иначе пересмотреть тип влияния C или P.",
+                factors=("accountability",),
             )
         )
 
@@ -207,6 +217,7 @@ def run_qc(
                 else "Коммуникации 3 без кейсов сопротивления/переговоров — вероятное завышение",
                 "Подтвердить изменение позиции/поведения, устойчивое сопротивление или "
                 "конфликт интересов. Иначе понизить до 2.",
+                factors=("know_how",),
             )
         )
 
@@ -219,6 +230,7 @@ def run_qc(
                 f"Несостыковка: специальные знания {kh.specialization.value} при "
                 f"управлении {kh.management.value}",
                 "Проверить логику: широкая интеграция обычно требует более высоких знаний.",
+                factors=("know_how",),
             )
         )
 
@@ -231,6 +243,7 @@ def run_qc(
                 f"Область {ps.area.value} (по шаблону) при сложности {ps.complexity.value} "
                 "почти всегда ошибка без сильного кейса",
                 "Подтвердить нестандартность сильным кейсом или пересмотреть область/сложность.",
+                factors=("problem_solving",),
             )
         )
 
@@ -241,6 +254,7 @@ def run_qc(
                 "high_complexity_few_cases", QCSeverity.MEDIUM, QCStatus.WARN,
                 f"Сложность {ps.complexity.value} при < 3 типовых кейсов",
                 "Запросить минимум 3 типовых нестандартных кейса (раздел 6.2).",
+                factors=("problem_solving",),
             )
         )
 
@@ -251,6 +265,7 @@ def run_qc(
                 "low_freedom_primary_impact", QCSeverity.MEDIUM, QCStatus.WARN,
                 f"Свобода действий {acc.freedom.value} при типе влияния P требует пересмотра",
                 "Строго контролируемая роль редко владеет KPI результата. Проверить.",
+                factors=("accountability",),
             )
         )
 
@@ -263,6 +278,7 @@ def run_qc(
                 f"Высокая свобода действий {acc.freedom.value} при узкой свободе мышления "
                 f"{ps.area.value}",
                 "Объяснить расхождение Freedom to Act и области Problem Solving.",
+                factors=("accountability", "problem_solving"),
             )
         )
 
@@ -283,6 +299,7 @@ def run_qc(
                 ),
                 "Указать годовой OPEX/CAPEX/выручку/бюджет в зоне роли и источник цифры; "
                 "если деньги искажают характер влияния, обосновать неколичественную ветку N.",
+                factors=("accountability",),
             )
         )
 
@@ -295,6 +312,7 @@ def run_qc(
                 "Большая величина воздействия (4) у поддерживающей функции — требует декомпозиции",
                 "Привязать масштаб к зоне ответственности роли (бюджет функции, охват), "
                 "а не ко всей компании «по привычке».",
+                factors=("accountability",),
             )
         )
 
@@ -320,6 +338,7 @@ def run_qc(
                 f"{score.profile_steps} шагов — за пределами континуума P4…A4",
                 "Проверить уровни Problem Solving и Accountability: такой разрыв "
                 "обычно означает ошибку выбора уровней.",
+                factors=("problem_solving", "accountability"),
             )
         )
 

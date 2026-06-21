@@ -284,6 +284,16 @@ class QCFlag(BaseModel):
     status: QCStatus
     message: str
     recommendation: str
+    factor_groups: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Какие факторы ('know_how'/'problem_solving'/'accountability') касается "
+            "это правило — пусто, если флаг про оценку целиком, а не про конкретный "
+            "фактор (например, person_not_role). UI использует это, чтобы показать "
+            "QC-предупреждение прямо на нужном факторном блоке, а не только в общем "
+            "списке QC-проверок."
+        ),
+    )
 
 
 # ── Итоговая карточка оценки ──────────────────────────────────────────────────
