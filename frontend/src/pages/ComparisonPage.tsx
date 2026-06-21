@@ -17,6 +17,7 @@ interface RoleCol {
   knowHow: number;
   problemSolving: number;
   accountability: number;
+  tableVersion: string;
 }
 
 function toCol(id: string, name: string, s: ScoreResult): RoleCol {
@@ -30,6 +31,7 @@ function toCol(id: string, name: string, s: ScoreResult): RoleCol {
     knowHow: s.know_how.points,
     problemSolving: s.problem_solving.points,
     accountability: s.accountability.points,
+    tableVersion: s.table_version,
   };
 }
 
@@ -178,6 +180,13 @@ export default function ComparisonPage() {
                       <Line label="Главное отличие" value={item.primaryDifference} />
                       <Line label="Факторы" value={item.factorNotes.join(" · ")} />
                     </dl>
+
+                    {item.versionMismatch && (
+                      <div className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+                        Оценки посчитаны по разным версиям методологии ({current.tableVersion} и{" "}
+                        {item.anchor.tableVersion}) — сравнение может быть некорректным.
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -198,6 +207,8 @@ export default function ComparisonPage() {
 function buildComparison(current: RoleCol, anchor: RoleCol) {
   const gradeGap = current.grade - anchor.grade;
   const totalGap = current.total - anchor.total;
+  const versionMismatch =
+    !!current.tableVersion && !!anchor.tableVersion && current.tableVersion !== anchor.tableVersion;
   const profileText =
     current.profile === anchor.profile
       ? "Профиль совпадает"
@@ -227,6 +238,7 @@ function buildComparison(current: RoleCol, anchor: RoleCol) {
     profileText,
     primaryDifference,
     factorNotes,
+    versionMismatch,
   };
 }
 

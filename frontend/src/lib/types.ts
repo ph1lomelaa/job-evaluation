@@ -257,6 +257,7 @@ export interface ScoreResult {
   grade_color: "blue" | "green" | "orange";
   calculation_explanation: string[];
   methodology_basis: string;
+  table_version: string;
 }
 
 export interface QCFlag {
@@ -282,6 +283,7 @@ export interface Evaluation {
   reasoning: string;
   clarifying_questions: string[];
   recommendation: string;
+  table_version: string;
   created_at: string;
 }
 

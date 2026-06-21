@@ -250,6 +250,10 @@ class ScoreResult(BaseModel):
     grade_color: str = Field(default="green", description="Цвет зоны: blue/green/orange")
     calculation_explanation: list[str] = Field(default_factory=list)
     methodology_basis: str = ""
+    table_version: str = Field(
+        default="",
+        description="Версия подстановочных таблиц Hay, по которой посчитан результат",
+    )
 
 
 # ── Проверки ──────────────────────────────────────────────────────────────────
@@ -305,6 +309,14 @@ class Evaluation(BaseModel):
     reasoning: str = ""
     clarifying_questions: list[str] = Field(default_factory=list)
     recommendation: str = ""
+    table_version: str = Field(
+        default="",
+        description=(
+            "Версия таблиц Hay, действовавшая на момент оценки — даже если "
+            "score не посчитан (Gate 0 не пройден). Дублирует score.table_version "
+            "при наличии score; нужно для предупреждений в сравнении (hierarchy.py)."
+        ),
+    )
 
     created_at: datetime = Field(default_factory=_now)
 

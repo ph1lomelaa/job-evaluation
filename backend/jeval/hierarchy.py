@@ -44,6 +44,25 @@ def _flag(code: str, sev: QCSeverity, status: QCStatus, msg: str, rec: str) -> Q
     return QCFlag(code=code, severity=sev, status=status, message=msg, recommendation=rec)
 
 
+def _table_version_mismatch_flag(
+    own_version: str, peer_name: str, peer_version: str
+) -> QCFlag | None:
+    """Предупреждение, если сравниваемые оценки посчитаны по разным версиям таблиц.
+
+    Числовое сравнение баллов между версиями некорректно: версии могут иметь
+    разную калибровку рядов Hay (см. ``scoring/versions.py``).
+    """
+    if not own_version or not peer_version or own_version == peer_version:
+        return None
+    return _flag(
+        "table_version_mismatch", QCSeverity.MEDIUM, QCStatus.WARN,
+        f"Оценки посчитаны по разным версиям методологии (текущая — {own_version}, "
+        f"«{peer_name}» — {peer_version}); числовое сравнение может быть некорректным.",
+        "Пересчитать одну из должностей по актуальной версии таблиц перед калибровкой "
+        "или явно учитывать разницу версий при сравнении.",
+    )
+
+
 def run_hierarchy_qc(
     dossier: JobDossier,
     selections: FactorSelections,
@@ -77,6 +96,12 @@ def run_hierarchy_qc(
                     "управленческий уровень (раздел 9.5).",
                 )
             )
+
+            version_flag = _table_version_mismatch_flag(
+                score.table_version, mgr_dossier.name, mgr_eval.score.table_version if mgr_eval.score else ""
+            )
+            if version_flag:
+                flags.append(version_flag)
 
             manager = mgr_eval.selections
             manager_score = mgr_eval.score
@@ -120,6 +145,11 @@ def run_hierarchy_qc(
         anchor_dossier, anchor_eval = found
         if anchor_eval.score is None:
             continue
+        version_flag = _table_version_mismatch_flag(
+            score.table_version, anchor_dossier.name, anchor_eval.score.table_version
+        )
+        if version_flag:
+            flags.append(version_flag)
         distance = steps_15pct(score.total_points, anchor_eval.score.total_points)
         if distance >= 3:
             flags.append(

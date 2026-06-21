@@ -16,6 +16,7 @@ from ..domain.models import (
 )
 from . import tables
 from .grades import grade_band_for_points, grade_position, steps_15pct
+from .versions import ACTIVE_TABLE_VERSION, get_table_set
 
 # Порог в шагах 15%, ниже которого профиль считается сбалансированным (L).
 PROFILE_BALANCED_STEPS = 1
@@ -34,23 +35,34 @@ def long_profile(profile: Profile, steps: int) -> str:
     return f"{profile.value}{capped}{suffix}"
 
 
-def compute_score(selections: FactorSelections) -> ScoreResult:
-    """Полный детерминированный расчёт по выбранным уровням факторов."""
+def compute_score(
+    selections: FactorSelections, table_version: str | None = None
+) -> ScoreResult:
+    """Полный детерминированный расчёт по выбранным уровням факторов.
+
+    ``table_version`` фиксирует, по какой версии подстановочных таблиц считалась
+    эта оценка (по умолчанию — активная версия), и сохраняется в результате —
+    см. ``ScoreResult.table_version`` и предупреждение в ``hierarchy.py`` при
+    сравнении оценок разных версий.
+    """
+    version = table_version or ACTIVE_TABLE_VERSION
+    table_set = get_table_set(version)
     kh = selections.know_how
     ps = selections.problem_solving
     acc = selections.accountability
 
     # 1. Know-How
     kh_points = tables.know_how_points(
-        kh.specialization.value, kh.management.value, kh.communication.value, kh.plus_minus
+        kh.specialization.value, kh.management.value, kh.communication.value,
+        kh.plus_minus, version,
     )
 
     # 2. Problem Solving (% от Know-How)
     ps_percent = tables.problem_solving_percent(
-        ps.area.value, int(ps.complexity.value), ps.plus_minus
+        ps.area.value, int(ps.complexity.value), ps.plus_minus, version
     )
     ps_points = tables.problem_solving_points(
-        kh_points, ps.area.value, int(ps.complexity.value), ps.plus_minus
+        kh_points, ps.area.value, int(ps.complexity.value), ps.plus_minus, version
     )
 
     # 3. Accountability
@@ -60,6 +72,7 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
         acc.impact.value if acc.impact else None,
         acc.plus_minus,
         acc.non_quantitative_impact.value if acc.non_quantitative_impact else None,
+        version,
     )
 
     total = kh_points + ps_points + acc_points
@@ -73,7 +86,7 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
     else:
         profile = Profile.P
 
-    band = grade_band_for_points(total)
+    band = grade_band_for_points(total, version)
     zone, color = grade_position(total, band)
 
     return ScoreResult(
@@ -104,10 +117,10 @@ def compute_score(selections: FactorSelections) -> ScoreResult:
             f"грейд {band.grade}, диапазон {band.lower}–{band.upper}, {zone.lower()} зона.",
         ],
         methodology_basis=(
-            "Расчёт воспроизводит функции COMP, IC, PTSIC, FINALITE и таблицу Jobgrades "
-            "из «Калькулятор Hay Group.xlsm»; трактовка факторов — по предоставленным "
-            "подстановочным таблицам и руководству эксперта."
+            f"Таблицы Hay {table_set.table_version} (сверено {table_set.verified_date}): "
+            f"{table_set.source}."
         ),
+        table_version=table_set.table_version,
     )
 
 

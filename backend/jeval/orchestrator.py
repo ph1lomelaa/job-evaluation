@@ -16,6 +16,7 @@ from .gate import evaluate_gate
 from .hierarchy import run_hierarchy_qc
 from .qc import has_blocking_failures, run_qc
 from .scoring import compute_score
+from .scoring.versions import ACTIVE_TABLE_VERSION
 
 
 class _AgentLike(Protocol):
@@ -59,6 +60,7 @@ class JobEvaluator:
                 reasoning="Оценка не может быть завершена: не хватает критических данных.",
                 clarifying_questions=[f"Предоставьте: {b}" for b in gate.missing_fields],
                 recommendation="Вернуть JE-досье на доработку.",
+                table_version=ACTIVE_TABLE_VERSION,
             )
 
         # Агент выбирает уровни факторов.
@@ -93,6 +95,7 @@ class JobEvaluator:
             reasoning=out.reasoning,
             clarifying_questions=out.clarifying_questions,
             recommendation=recommendation,
+            table_version=score.table_version,
         )
 
 
