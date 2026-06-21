@@ -91,6 +91,7 @@ class JobEvaluator:
             score=score,
             qc_flags=flags,
             confidence=_downgrade(out.overall_confidence, has_warn, has_fail),
+            is_test_data=out.is_test_data,
             role_summary=out.role_summary,
             reasoning=out.reasoning,
             clarifying_questions=out.clarifying_questions,

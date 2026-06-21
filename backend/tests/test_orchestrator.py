@@ -36,6 +36,21 @@ def test_qc_failure_forces_needs_clarification(full_dossier, fake_agent):
     assert str(len(fail_flags) + sum(1 for f in ev.qc_flags if f.status.value == "warn")) in ev.recommendation
 
 
+def test_is_test_data_propagates_from_fake_agent(full_dossier):
+    """ФАЗА 5: Evaluation.is_test_data зеркалит AgentOutput.is_test_data, чтобы
+    результат настоящего jeval.agent.fake.FakeAgent был отличим от реальной
+    оценки (не просто тестового дубля из conftest)."""
+    from jeval.agent.fake import FakeAgent as RealFakeAgent
+
+    ev = JobEvaluator(agent=RealFakeAgent()).evaluate(full_dossier)
+    assert ev.is_test_data is True
+
+
+def test_is_test_data_false_for_real_agent_output(full_dossier, fake_agent):
+    ev = JobEvaluator(agent=fake_agent).evaluate(full_dossier)
+    assert ev.is_test_data is False
+
+
 def test_gate_fail_skips_agent(fake_agent):
     ev = JobEvaluator(agent=fake_agent).evaluate(JobDossier(name="Пустая"))
     assert ev.status == EvaluationStatus.CANNOT_EVALUATE

@@ -279,6 +279,7 @@ export interface Evaluation {
   score?: ScoreResult | null;
   qc_flags: QCFlag[];
   confidence: Confidence;
+  is_test_data: boolean;
   role_summary: string;
   reasoning: string;
   clarifying_questions: string[];

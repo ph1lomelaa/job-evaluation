@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     jeval_fake_agent: bool = False
     jeval_import_use_ai: bool = False
 
+    # ФАЗА 5: FakeAgent выдаёт тестовые уровни, не пригодные для реального
+    # Оценочного комитета (см. Evaluation.is_test_data). В jeval_env=production
+    # его включение требует ВТОРОГО явного флага — одного JEVAL_FAKE_AGENT=1
+    # недостаточно, чтобы тестовые данные не попали в прод по недосмотру.
+    jeval_allow_fake_in_prod: bool = False
+
     # Сервис
     jeval_host: str = "127.0.0.1"
     jeval_port: int = 8000

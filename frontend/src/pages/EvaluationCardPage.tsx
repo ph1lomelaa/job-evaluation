@@ -213,7 +213,12 @@ export default function EvaluationCardPage() {
                 </Link>
               )}
               {evaluation && (
-                <Button variant="secondary" onClick={() => window.print()}>
+                <Button
+                  variant="secondary"
+                  disabled={evaluation.is_test_data}
+                  title={evaluation.is_test_data ? "Тестовые данные нельзя выгружать для комитета" : undefined}
+                  onClick={() => window.print()}
+                >
                   PDF
                 </Button>
               )}
@@ -221,6 +226,24 @@ export default function EvaluationCardPage() {
           </div>
         </div>
       </div>
+
+      {evaluation?.is_test_data && (
+        <Card className="border-2 border-accent bg-accent/10 p-5 print:hidden">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠</span>
+            <div>
+              <div className="text-sm font-bold uppercase tracking-wide text-accent">
+                Тестовые данные — не для Оценочного комитета
+              </div>
+              <p className="mt-1 text-sm text-[rgb(var(--fg)/0.78)]">
+                Уровни факторов выбраны офлайн-заглушкой (FakeAgent), а не реальным агентом —
+                это демонстрационный расчёт. Переоцените должность с настоящим агентом
+                (ANTHROPIC_API_KEY/GROQ_API_KEY) перед выносом на комитет.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {position.review_status === "draft_imported" && position.import_metadata && (
         <Card className="border-warn/30 p-5">

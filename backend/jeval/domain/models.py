@@ -305,6 +305,14 @@ class Evaluation(BaseModel):
 
     qc_flags: list[QCFlag] = Field(default_factory=list)
     confidence: Confidence = Confidence.LOW
+    is_test_data: bool = Field(
+        default=False,
+        description=(
+            "Уровни выбраны заглушкой (FakeAgent), а не реальным агентом/экспертом — "
+            "ФАЗА 5: такую оценку нельзя показывать как готовую для Оценочного комитета "
+            "(см. guard в api/deps.get_evaluator и баннер EvaluationCardPage)."
+        ),
+    )
     role_summary: str = Field(default="", description="Нейтральное резюме роли (раздел 10.2)")
     reasoning: str = ""
     clarifying_questions: list[str] = Field(default_factory=list)

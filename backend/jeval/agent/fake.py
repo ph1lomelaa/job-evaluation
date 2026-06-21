@@ -127,6 +127,7 @@ class FakeAgent:
             ),
             clarifying_questions=["Какой годовой CAPEX находится в зоне влияния роли?"],
             recommendation="Провести реальную оценку агентом перед комитетом.",
+            is_test_data=True,
             selections=FactorSelections(
                 know_how=KnowHowSelection(
                     specialization=p["kh_spec"],

@@ -32,6 +32,14 @@ class AgentOutput(BaseModel):
         default="",
         description="Что принять предварительно и что подтвердить до решения комитета",
     )
+    is_test_data: bool = Field(
+        default=False,
+        description=(
+            "True у заглушек (FakeAgent и т. п.): Evaluation.is_test_data копирует "
+            "это значение, чтобы тестовый результат не прошёл за реальную оценку "
+            "(см. ФАЗА 5 — guard в api/deps.py и баннер в EvaluationCardPage)."
+        ),
+    )
 
 
 def _tool_schema() -> dict[str, Any]:

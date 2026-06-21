@@ -49,6 +49,13 @@ def get_evaluator(request: Request) -> JobEvaluator:
         settings = get_settings()
         provider = settings.jeval_agent_provider
         if settings.jeval_fake_agent or provider == "fake":
+            if settings.jeval_env == "production" and not settings.jeval_allow_fake_in_prod:
+                raise HTTPException(
+                    503,
+                    "FakeAgent (тестовые данные) запрещён в production. Укажите "
+                    "ANTHROPIC_API_KEY/GROQ_API_KEY или явно подтвердите тестовый "
+                    "режим через JEVAL_ALLOW_FAKE_IN_PROD=1.",
+                )
             app.state.evaluator = JobEvaluator(agent=FakeAgent())
         elif provider == "groq":
             if not settings.groq_api_key:
