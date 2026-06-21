@@ -153,6 +153,29 @@ def test_anchor_grade_gap_and_calibration(full_dossier, sample_output):
     assert calibration is not None and calibration.status == QCStatus.PASS
 
 
+def test_anchor_grade_gap_not_flagged_for_compensating_factor_shifts(full_dossier, sample_output):
+    """ФАЗА 6: backend-контракт, который теперь зеркалит ComparisonPage.tsx
+    (buildComparison/steps15pct) — компенсирующие сдвиги по факторам (+30
+    Know-How / −30 Accountability) с тем же total_points не считаются разрывом,
+    потому что anchor_grade_gap смотрит только на total_points, а не на факторы
+    по отдельности."""
+    score = compute_score(sample_output.selections)
+    anchor_score = score.model_copy(
+        update={
+            "know_how": score.know_how.model_copy(update={"points": score.know_how.points + 30}),
+            "accountability": score.accountability.model_copy(
+                update={"points": score.accountability.points - 30}
+            ),
+        }
+    )
+    assert anchor_score.total_points == score.total_points
+
+    anchor = JobDossier(id="a-2", name="Иной профиль, тот же total")
+    anchor_eval = _evaluation_for(sample_output.selections, anchor_score)
+    flags = run_hierarchy_qc(full_dossier, sample_output.selections, score, [(anchor, anchor_eval)])
+    assert _flag(flags, "anchor_grade_gap") is None
+
+
 def test_anchors_not_in_system_warns(full_dossier, sample_output):
     score = compute_score(sample_output.selections)
     flags = run_hierarchy_qc(full_dossier, sample_output.selections, score, [])

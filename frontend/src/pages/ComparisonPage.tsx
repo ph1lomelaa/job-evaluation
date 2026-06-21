@@ -204,6 +204,24 @@ export default function ComparisonPage() {
   );
 }
 
+// Зеркалит backend/jeval/scoring/grades.py:steps_15pct (тот же геометрический
+// шаг 15% ряда Hay) и порог "разрыв" из backend/jeval/hierarchy.py
+// (anchor_grade_gap: distance >= 3) — чтобы один и тот же сценарий давал
+// одинаковый вердикт "существенно/не существенно" и на фронте, и в QC.
+// Раньше здесь были независимые абсолютные пороги по баллам факторов
+// (25/15/25), которые расходились с backend даже при равном total: например,
+// компенсирующие сдвиги +30 Know-How / −30 Accountability не меняют total и
+// не флагуются backend'ом (distance = 0), но фронт показывал "существенное
+// расхождение" из-за превышения порога по одному фактору.
+const ANCHOR_GAP_STEPS_THRESHOLD = 3;
+
+function steps15pct(a: number, b: number): number {
+  if (a <= 0 || b <= 0) return 0;
+  const hi = Math.max(a, b);
+  const lo = Math.min(a, b);
+  return Math.round(Math.log(hi / lo) / Math.log(1.15));
+}
+
 function buildComparison(current: RoleCol, anchor: RoleCol) {
   const gradeGap = current.grade - anchor.grade;
   const totalGap = current.total - anchor.total;
@@ -213,23 +231,22 @@ function buildComparison(current: RoleCol, anchor: RoleCol) {
     current.profile === anchor.profile
       ? "Профиль совпадает"
       : `Профили различаются (${current.profile} против ${anchor.profile})`;
+
+  const totalSteps = steps15pct(current.total, anchor.total);
+  const isSignificant = totalSteps >= ANCHOR_GAP_STEPS_THRESHOLD;
+
   const factorGaps = [
-    { label: "Know-How", delta: current.knowHow - anchor.knowHow, threshold: 25 },
-    { label: "Problem Solving", delta: current.problemSolving - anchor.problemSolving, threshold: 15 },
-    { label: "Accountability", delta: current.accountability - anchor.accountability, threshold: 25 },
+    { label: "Know-How", delta: current.knowHow - anchor.knowHow },
+    { label: "Problem Solving", delta: current.problemSolving - anchor.problemSolving },
+    { label: "Accountability", delta: current.accountability - anchor.accountability },
   ];
-  const notable = factorGaps.filter((item) => Math.abs(item.delta) >= item.threshold);
-  const primaryDifference =
-    notable.length > 0
-      ? notable
-          .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-          .map((item) => `${item.label} ${signed(item.delta)}`)
-          .join(" · ")
-      : "Существенных расхождений по факторам нет";
-  const factorNotes =
-    notable.length > 0
-      ? notable.map((item) => `${item.label} ${signed(item.delta)}`)
-      : ["Баллы по факторам близки"];
+  const biggestFactor = [...factorGaps].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+
+  const primaryDifference = isSignificant
+    ? `Существенное расхождение: ${totalSteps} шагов по 15% по сумме баллов`
+      + (biggestFactor.delta !== 0 ? ` — главным образом за счёт ${biggestFactor.label} (${signed(biggestFactor.delta)})` : "")
+    : `Существенных расхождений нет (${totalSteps} шагов по 15%, порог — ${ANCHOR_GAP_STEPS_THRESHOLD})`;
+  const factorNotes = factorGaps.map((item) => `${item.label} ${signed(item.delta)}`);
 
   return {
     anchor,
