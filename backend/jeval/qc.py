@@ -201,15 +201,33 @@ def run_qc(
             + dossier.authorities.recommends
         )
         assumed_authority = any(AUTHORITY_ASSUMPTION_MARKER in t for t in authority_texts)
+        authority_sections = [
+            label
+            for label, values in (
+                ("решает самостоятельно", dossier.authorities.decides_alone),
+                ("согласует", dossier.authorities.requires_approval),
+                ("рекомендует", dossier.authorities.recommends),
+            )
+            if any(
+                AUTHORITY_ASSUMPTION_MARKER in (item.item if hasattr(item, "item") else item)
+                for item in values
+            )
+        ]
         flags.append(
             _flag(
                 "authorities_assumed", QCSeverity.HIGH,
                 QCStatus.FAIL if assumed_authority else QCStatus.PASS,
-                "Полномочия заполнены шаблоном по умолчанию (организационная иерархия), "
-                "не описаны в документе явно" if assumed_authority
+                (
+                    "В исходном документе не найдены явные полномочия. Разделы «"
+                    + "», «".join(authority_sections)
+                    + "» заполнены предположением по организационной иерархии, а не "
+                    "подтверждёнными фактами. Поэтому свободу действий D пока нельзя "
+                    "считать доказанной."
+                ) if assumed_authority
                 else "Полномочия не помечены как предположение",
-                "Подтвердить реальные полномочия (что решает сам / согласует / "
-                "рекомендует) и заменить шаблонный текст фактами из документа или от HR.",
+                "Для каждого блока указать конкретные примеры: что роль решает сама, "
+                "какие решения и с кем согласует, что только рекомендует. Затем заменить "
+                "шаблон фактами из документа либо подтверждением HR/руководителя роли.",
                 factors=("accountability",),
             )
         )
@@ -378,13 +396,26 @@ def run_qc(
 
     # 8.4 Профиль вне допустимых пределов континуума (P4…A4)
     if score.profile_steps > PROFILE_MAX_STEPS:
+        dominant_factor = (
+            "Problem Solving выше Accountability"
+            if score.problem_solving.points > score.accountability.points
+            else "Accountability выше Problem Solving"
+        )
         flags.append(
             _flag(
                 "profile_out_of_range", QCSeverity.MEDIUM, QCStatus.WARN,
-                f"Профиль {score.profile_long}: разрыв PS/Accountability "
-                f"{score.profile_steps} шагов — за пределами континуума P4…A4",
-                "Проверить уровни Problem Solving и Accountability: такой разрыв "
-                "обычно означает ошибку выбора уровней.",
+                f"{dominant_factor}: {score.problem_solving.points} против "
+                f"{score.accountability.points} баллов. Это разрыв в "
+                f"{score.profile_steps} шагов по шкале ≈15%, тогда как допустимый "
+                f"континуум ограничен {PROFILE_MAX_STEPS} шагами. Поэтому профиль "
+                f"показан как {score.profile_long} со звёздочкой.",
+                f"Сопоставить основания уровней Problem Solving "
+                f"({ps.area.value}/{ps.complexity.value}) и Accountability "
+                f"({acc.freedom.value}/{acc.magnitude.value}/"
+                f"{acc.non_quantitative_impact.value if acc.non_quantitative_impact else '—'}). "
+                "Проверить, не завышены ли свобода мышления и сложность либо не занижены "
+                "ли свобода действий и организационное воздействие. Изменять уровень "
+                "следует только при наличии фактов в досье.",
                 factors=("problem_solving", "accountability"),
             )
         )
