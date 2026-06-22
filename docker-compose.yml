@@ -29,7 +29,7 @@ services:
       JEVAL_ENV: production
       JEVAL_AUTH_REQUIRED: "true"
       JEVAL_REGISTRATION_ENABLED: "true"
-      JEVAL_DISABLE_ACCESS_GATE: "false"
+      JEVAL_DISABLE_ACCESS_GATE: "true"
       JEVAL_DB_URL: postgresql+psycopg://${POSTGRES_USER:-jeval}:${POSTGRES_PASSWORD:-jeval}@db:5432/${POSTGRES_DB:-jeval}
       JEVAL_FRONTEND_URL: https://${DOMAIN}
       JEVAL_GOOGLE_REDIRECT_URI: https://${DOMAIN}/api/auth/google/callback

@@ -61,7 +61,7 @@ curl -fsS https://job-evaluation.duckdns.org/health
 
 Backend and frontend do not publish host ports. Public traffic enters through the existing Caddy on 80/443. Uploaded documents and PostgreSQL data use Docker volumes.
 
-Self-registration by email and password is enabled in production. Google sign-in keeps its separate company access allowlist check while `JEVAL_DISABLE_ACCESS_GATE=false`.
+Self-registration by email/password and Google is enabled in production. With `JEVAL_DISABLE_ACCESS_GATE=true`, any verified Google account may create a user; company permissions remain controlled by memberships and RBAC.
 
 ## 4. Updates and backup
 
@@ -79,6 +79,6 @@ Also back up the `backend_uploads` Docker volume. Keep database and upload backu
 
 - Open the site in a private browser window and verify HTTPS.
 - Test email/password and Google login/logout.
-- Verify an uninvited Google account is rejected when `JEVAL_DISABLE_ACCESS_GATE=false`.
+- Verify a new Google account can sign in and reaches onboarding.
 - Upload a test document and confirm it remains after container recreation.
 - Check `docker compose logs` for OAuth, database, and proxy errors.

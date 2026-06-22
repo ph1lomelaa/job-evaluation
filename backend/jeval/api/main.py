@@ -36,8 +36,8 @@ def create_app(
     settings = get_settings()
     if settings.jeval_disable_access_gate:
         logger.warning(
-            "ACCESS GATE DISABLED — DEV ONLY: JEVAL_DISABLE_ACCESS_GATE=1 пропускает "
-            "allowlist-проверку при первом входе через Google. Не использовать в проде."
+            "GOOGLE ACCESS GATE DISABLED: любой подтверждённый Google-аккаунт может "
+            "создать пользователя; права внутри компаний ограничены RBAC."
         )
     app = FastAPI(title="Платформа оценки должностей (Hay Group)", version="0.2.0")
     app.state.settings = settings

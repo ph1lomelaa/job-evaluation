@@ -229,12 +229,11 @@ def google_callback(
     display_name = profile.get("name") or email.split("@", 1)[0]
     google_sub = profile["sub"]
     invite_matches = store.list_company_invites_by_email(email)
-    # ВРЕМЕННО для разработки (JEVAL_DISABLE_ACCESS_GATE=1): allowlist-проверка
+    # При JEVAL_DISABLE_ACCESS_GATE=1 allowlist-проверка
     # ниже (приглашение или уже состоящий в компании пользователь) пропускается
     # целиком. RBAC после входа (роли в компаниях) не затрагивается — просто
     # новый пользователь проходит дальше без приглашения, как при обычной
-    # email/password-регистрации. По умолчанию флаг False — ветка не меняет
-    # поведение, пока её явно не включили.
+    # email/password-регистрации.
     if not settings.jeval_disable_access_gate and not invite_matches:
         existing = store.get_user_by_email(email)
         if not existing:
