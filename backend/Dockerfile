@@ -17,7 +17,12 @@ COPY pyproject.toml ./
 COPY jeval ./jeval
 
 RUN useradd -m -u 10001 appuser \
+    && mkdir -p /app/uploads \
     && chown -R appuser:appuser /app
+# Каталог должен существовать и принадлежать appuser ДО монтирования тома
+# backend_uploads:/app/uploads (docker-compose.yml) — иначе Docker создаёт
+# точку монтирования от root при первом старте, и appuser не может туда
+# писать (PermissionError при загрузке документов).
 
 USER appuser
 
