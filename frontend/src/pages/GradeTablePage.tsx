@@ -92,7 +92,7 @@ export default function GradeTablePage() {
             <h3 className="text-base">Эталонная матрица Jobgrades</h3>
             <p className="mt-1 text-xs text-muted">Точные границы из листа Jobgrades калькулятора Hay Group.</p>
           </div>
-          <div className="max-h-[420px] overflow-auto">
+          <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-[#f5f3ef] text-left text-xs text-fg dark:bg-[#242424]">
                 <tr>

@@ -53,14 +53,7 @@ export default function AuthPage() {
   return (
     <main className="auth-shell min-h-screen lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(480px,0.92fr)]">
       <section className="auth-hero relative flex min-h-[46vh] flex-col overflow-hidden border-b border-[#e3dfd8] px-6 py-7 sm:px-10 lg:min-h-screen lg:border-b-0 lg:border-r lg:px-[clamp(40px,5vw,84px)] lg:py-10">
-        <div className="flex items-center gap-3 text-[15px] font-semibold tracking-[-0.2px] text-[#282522]">
-          <span>Оценка должностей</span>
-        </div>
-
         <div className="relative z-10 my-auto max-w-[760px] py-14 lg:py-20">
-          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#8c2d3f]">
-            Система грейдирования
-          </p>
           <h1 className="font-display text-[48px] font-medium leading-[0.91] tracking-[-2.2px] text-[#211f1d] sm:text-[68px] lg:text-[clamp(58px,5.2vw,88px)]">
             Решения по ролям.
             <br />

@@ -34,34 +34,34 @@ export default function AssessmentSheetPage() {
     {error && <ErrorBanner message={error} onRetry={reload} />}
     {loading ? <Skeleton className="h-80" /> : <Card className="overflow-hidden rounded-[18px] p-0">
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[1480px] border-collapse text-sm">
+      <table className="w-full border-collapse text-[13px]">
         <thead className="sticky top-0 z-20 text-xs">
           <tr className="text-center">
-            <th rowSpan={2} className="sticky left-0 z-30 min-w-[270px] border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-5 py-3 text-left font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Должность</th>
-            <th colSpan={3} className="border-b border-r border-[#d8d3cc] bg-[#f2eee7] px-4 py-2.5 font-semibold text-fg dark:border-white/15 dark:bg-white/10">Знания и умения · Know-How</th>
-            <th colSpan={4} className="border-b border-r border-[#d8d3cc] bg-[#eef1ed] px-4 py-2.5 font-semibold text-fg dark:border-white/15 dark:bg-white/[0.07]">Решение вопросов · Problem Solving</th>
-            <th colSpan={3} className="border-b border-r border-[#d8d3cc] bg-[#f1edf3] px-4 py-2.5 font-semibold text-fg dark:border-white/15 dark:bg-white/10">Ответственность · Accountability</th>
-            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-4 py-3 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Итого</th>
-            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-4 py-3 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Профиль</th>
-            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-4 py-3 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Грейд</th>
-            <th rowSpan={2} className="min-w-[180px] border-b border-[#d8d3cc] bg-[#f5f3ef] px-4 py-3 text-left font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Статус</th>
+            <th rowSpan={2} className="sticky left-0 z-30 w-[160px] max-w-[160px] border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-3 py-2 text-left font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Должность</th>
+            <th colSpan={3} className="border-b border-r border-[#d8d3cc] bg-[#f2eee7] px-2 py-1.5 font-semibold text-fg dark:border-white/15 dark:bg-white/10"><div>Знания и умения</div><div className="text-[10px] font-normal text-muted">Know-How</div></th>
+            <th colSpan={4} className="border-b border-r border-[#d8d3cc] bg-[#eef1ed] px-2 py-1.5 font-semibold text-fg dark:border-white/15 dark:bg-white/[0.07]"><div>Решение вопросов</div><div className="text-[10px] font-normal text-muted">Problem Solving</div></th>
+            <th colSpan={3} className="border-b border-r border-[#d8d3cc] bg-[#f1edf3] px-2 py-1.5 font-semibold text-fg dark:border-white/15 dark:bg-white/10"><div>Ответственность</div><div className="text-[10px] font-normal text-muted">Accountability</div></th>
+            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-2 py-2 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Итого</th>
+            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-2 py-2 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Профиль</th>
+            <th rowSpan={2} className="border-b border-r border-[#d8d3cc] bg-[#f5f3ef] px-2 py-2 font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Грейд</th>
+            <th rowSpan={2} className="w-[130px] border-b border-[#d8d3cc] bg-[#f5f3ef] px-2 py-2 text-left font-semibold text-fg dark:border-white/15 dark:bg-[#242424]">Статус</th>
           </tr>
           <tr className="bg-[#faf9f6] text-center text-muted dark:bg-[#202020]">
             {["Код", "+/−", "Баллы", "Код", "+/−", "% KH", "Баллы", "Код", "+/−", "Баллы"].map((label, index) => (
-              <th key={`${label}-${index}`} className="border-b border-r border-[#d8d3cc] px-3 py-2 font-medium dark:border-white/15">{label}</th>
+              <th key={`${label}-${index}`} className="border-b border-r border-[#d8d3cc] px-1.5 py-1.5 font-medium dark:border-white/15">{label}</th>
             ))}
           </tr>
         </thead>
         <tbody>{rows.map(({ position, evaluation }) => {
           const s = evaluation?.selections; const score = evaluation?.score;
-          const cell = "border-b border-r border-[#dedad4] px-3 py-3 text-center dark:border-white/10";
+          const cell = "border-b border-r border-[#dedad4] px-1.5 py-2 text-center dark:border-white/10";
           return <tr key={position.id} onDoubleClick={() => position.id && navigate(`/positions/${position.id}`)} title="Двойной клик — открыть карточку" className="group cursor-pointer bg-white transition-colors hover:bg-[#f8f6f2] dark:bg-[rgb(var(--glass-bg))] dark:hover:bg-white/5">
-            <td className="sticky left-0 z-10 border-b border-r border-[#dedad4] bg-white px-5 py-3 font-medium shadow-[4px_0_8px_rgba(38,32,25,0.035)] group-hover:bg-[#f8f6f2] dark:border-white/10 dark:bg-[rgb(var(--glass-bg))] dark:group-hover:bg-[#252525]">{position.name}<div className="mt-1 text-xs font-normal text-muted">{position.dzo || position.department || "—"}</div></td>
+            <td title={position.name} className="sticky left-0 z-10 w-[160px] max-w-[160px] truncate border-b border-r border-[#dedad4] bg-white px-3 py-2 font-medium shadow-[4px_0_8px_rgba(38,32,25,0.035)] group-hover:bg-[#f8f6f2] dark:border-white/10 dark:bg-[rgb(var(--glass-bg))] dark:group-hover:bg-[#252525]"><div className="truncate">{position.name}</div><div className="truncate text-xs font-normal text-muted">{position.dzo || position.department || "—"}</div></td>
             <td className={`${cell} num`}>{s ? `${s.know_how.specialization}/${s.know_how.management}/${s.know_how.communication}` : "—"}</td><td className={`${cell} num`}>{s ? modifier(s.know_how.plus_minus) : "—"}</td><td className={`${cell} num font-semibold`}>{score?.know_how.points ?? "—"}</td>
             <td className={`${cell} num`}>{s ? `${s.problem_solving.area}/${s.problem_solving.complexity}` : "—"}</td><td className={`${cell} num`}>{s ? modifier(s.problem_solving.plus_minus) : "—"}</td><td className={`${cell} num`}>{score ? `${score.problem_solving.percentage}%` : "—"}</td><td className={`${cell} num font-semibold`}>{score?.problem_solving.points ?? "—"}</td>
             <td className={`${cell} num`}>{s ? `${s.accountability.freedom}/${s.accountability.magnitude}/${s.accountability.non_quantitative_impact ?? s.accountability.impact ?? "—"}` : "—"}</td><td className={`${cell} num`}>{s ? modifier(s.accountability.plus_minus) : "—"}</td><td className={`${cell} num font-semibold`}>{score?.accountability.points ?? "—"}</td>
             <td className={`${cell} num text-base font-semibold`}>{score?.total_points ?? "—"}</td><td className={`${cell} num font-medium`}>{score?.profile_long || "—"}</td><td className={`${cell} num font-semibold`}>{score?.grade ?? "—"}</td>
-            <td className="border-b border-[#dedad4] px-4 py-3 dark:border-white/10">{evaluation ? <StatusDot color={STATUS_COLOR[evaluation.status]}>{STATUS_LABEL[evaluation.status]}</StatusDot> : <StatusDot color="gray">Не оценена</StatusDot>}</td>
+            <td className="border-b border-[#dedad4] px-2 py-2 dark:border-white/10">{evaluation ? <StatusDot color={STATUS_COLOR[evaluation.status]}>{STATUS_LABEL[evaluation.status]}</StatusDot> : <StatusDot color="gray">Не оценена</StatusDot>}</td>
           </tr>;
         })}</tbody>
       </table>
