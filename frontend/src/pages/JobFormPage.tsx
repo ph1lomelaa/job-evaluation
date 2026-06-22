@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBanner, Field, Input, Skeleton, Stepper, Textarea } from "../components/ui";
 import { api } from "../lib/api";
+import { importFieldLabel } from "../lib/mapping";
 import { useFetch } from "../lib/useFetch";
 import type { JobDossier, ProblemCase } from "../lib/types";
 
@@ -359,8 +360,13 @@ export default function JobFormPage() {
       )}
       {isEdit && existing?.import_metadata?.missing_fields.length ? (
         <Card className="border-warn/30 p-4 text-sm">
-          <div className="font-medium">Нужно дополнить перед оценкой</div>
-          <div className="mt-1 text-muted">{existing.import_metadata.missing_fields.join(", ")}</div>
+          <div className="font-medium">Данные для уточнения</div>
+          <p className="mt-1 text-xs text-muted">Их не было в исходном документе. Заполните только то, что известно; предварительный расчёт доступен и без них.</p>
+          <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {existing.import_metadata.missing_fields.map((field) => (
+              <li key={field} className="flex gap-2"><span className="text-warn">•</span>{importFieldLabel(field)}</li>
+            ))}
+          </ul>
         </Card>
       ) : null}
       <p className="max-w-[920px] text-sm text-muted">

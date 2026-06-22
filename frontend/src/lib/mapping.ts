@@ -37,6 +37,51 @@ export const EMPTY_FACTOR_RULES: FactorLevelRules = {
   non_quantitative_impact: [],
 };
 
+const IMPORT_FIELD_LABELS: Record<string, string> = {
+  name: "Название должности",
+  dzo: "Организация / ДЗО",
+  department: "Подразделение",
+  function: "Функция / профессиональное направление",
+  "reporting.manager": "Непосредственный руководитель",
+  purpose: "Цель должности",
+  key_results: "Ключевые результаты",
+  responsibilities: "Обязанности",
+  kpis: "KPI / показатели",
+  authorities: "Полномочия",
+  decides_alone: "Самостоятельные решения",
+  requires_approval: "Решения, требующие согласования",
+  recommends: "Рекомендательные полномочия",
+  scope: "Масштаб ответственности",
+  annual_opex: "Годовой OPEX",
+  annual_capex: "Годовой CAPEX",
+  annual_revenue: "Годовая выручка в зоне роли",
+  function_budget: "Бюджет функции",
+  project_portfolio: "Портфель проектов",
+  headcount: "Численность в зоне роли",
+  assets: "Активы / критичные системы",
+  scope_source: "Источник данных о масштабе",
+  organizational_context: "Организационный контекст",
+  stakeholders: "Ключевые стейкхолдеры",
+  anchor_roles: "Сопоставимые должности",
+  problem_cases: "Типовые сложные рабочие ситуации",
+  documents: "Дополнительные документы",
+  confirmed_by: "Подтверждение руководителя или HR",
+};
+
+export function importFieldLabel(field: string): string {
+  return IMPORT_FIELD_LABELS[field] ?? field.replace(/_/g, " ");
+}
+
+export function extractionMethodLabel(method: string): string {
+  const labels: Record<string, string> = {
+    ai_openai: "Распознано ИИ (OpenAI)",
+    ai_groq: "Распознано ИИ (Groq)",
+    ai_anthropic: "Распознано ИИ (Anthropic)",
+    heuristic_docx: "Распознано по структуре DOCX",
+  };
+  return labels[method] ?? "Автоматическое распознавание";
+}
+
 /** Последняя оценка для каждой должности (по created_at). */
 export function latestByPosition(evaluations: Evaluation[]): Map<string, Evaluation> {
   const map = new Map<string, Evaluation>();

@@ -214,9 +214,6 @@ function Result({ score, qcFlags }: { score: ScoreResult; qcFlags: QCFlag[] }) {
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6">
           {score.calculation_explanation.map((line) => <li key={line}>{line}</li>)}
         </ol>
-        <p className="mt-4 border-t border-[rgb(var(--row-divider))] pt-4 text-xs leading-5 text-muted">
-          {score.methodology_basis}
-        </p>
       </Card>
       {qcFlags.length > 0 && (
         <Card>

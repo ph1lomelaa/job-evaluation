@@ -8,7 +8,7 @@
   /* Light по умолчанию */
   --bg: 248 247 244;
   --fg: 28 26 24;
-  --muted: 82 78 74;
+  --muted: 72 68 64;
   --glass-bg: 255 255 255;
   --glass-bg-alpha: 1;
   --glass-border: 224 220 215 / 1;
@@ -41,7 +41,7 @@
   }
   body {
     @apply bg-bg text-fg font-sans antialiased;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.6;
   }
   h1 { @apply text-fg; font-size: 32px; font-weight: 600; letter-spacing: -0.7px; line-height: 1.2; }

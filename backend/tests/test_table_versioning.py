@@ -45,11 +45,9 @@ def test_compute_score_stamps_active_table_version(sample_output):
     assert score.table_version == ACTIVE_TABLE_VERSION
 
 
-def test_methodology_basis_is_structured_per_version(sample_output):
+def test_methodology_basis_is_not_exposed_in_user_result(sample_output):
     score = compute_score(sample_output.selections)
-    table_set = get_table_set(ACTIVE_TABLE_VERSION)
-    assert table_set.table_version in score.methodology_basis
-    assert table_set.verified_date in score.methodology_basis
+    assert score.methodology_basis == ""
 
 
 def test_orchestrator_evaluation_carries_table_version(full_dossier, fake_agent):

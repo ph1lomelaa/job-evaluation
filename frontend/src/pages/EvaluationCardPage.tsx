@@ -9,8 +9,10 @@ import { useFactorLevelReference, useFactorLevelRules } from "../lib/factorLevel
 import {
   EMPTY_FACTOR_LEVELS,
   EMPTY_FACTOR_RULES,
+  extractionMethodLabel,
   factorCodes,
   groupEvidence,
+  importFieldLabel,
   scopeSummary,
   subfactorRows,
   type SubfactorRow,
@@ -20,7 +22,6 @@ import {
   CONFIDENCE_LABEL,
   FACTOR_GROUP_LABEL,
   PROFILE_LABEL,
-  STATUS_LABEL,
   type Confidence,
   type Evaluation,
   type FactorGroup,
@@ -29,38 +30,24 @@ import {
   type ScoreResult,
 } from "../lib/types";
 
-const CONF_DOT: Record<Confidence, Parameters<typeof StatusDot>[0]["color"]> = {
-  high: "green",
-  medium: "amber",
-  low: "red",
-};
-const STATUS_DOT: Record<Evaluation["status"], Parameters<typeof StatusDot>[0]["color"]> = {
-  ready: "green",
-  needs_clarification: "amber",
-  cannot_evaluate: "red",
-};
-
 const STATUS_EXPLANATION: Record<
   Evaluation["status"],
-  { summary: string; nextStep: string; tone: Parameters<typeof StatusDot>[0]["color"] }
+  { summary: string; nextStep: string }
 > = {
   ready: {
     summary:
       "Баллы рассчитаны, а блокирующих проблем по данным нет. Карточку можно выносить на Оценочный комитет.",
     nextStep: "Следующий шаг: комитет и калибровка с якорями, если они есть.",
-    tone: "green",
   },
   needs_clarification: {
     summary:
       "Баллы уже есть, но есть уточнения или QC-флаги. Карточка предварительная и требует подтверждения спорных мест.",
     nextStep: "Следующий шаг: уточнить спорные факты и при необходимости доработать досье.",
-    tone: "amber",
   },
   cannot_evaluate: {
     summary:
       "Критических данных недостаточно. Уровни факторов, баллы и грейд не присваиваются, пока досье не будет доработано.",
     nextStep: "Следующий шаг: вернуть JE-досье на доработку.",
-    tone: "red",
   },
 };
 
@@ -95,9 +82,13 @@ export default function EvaluationCardPage() {
 
   const evaluation = versions.find((v) => v.id === versionId) ?? versions[0];
 
+  const importedRoleCoreCount = data?.[0]
+    ? Number(Boolean(data[0].purpose?.trim()))
+      + Number(data[0].key_results.length > 0)
+      + Number(data[0].responsibilities.length > 0)
+    : 0;
   const needsDraftReview = Boolean(
-    data?.[0]?.review_status === "draft_imported" &&
-    data[0].import_metadata?.missing_fields.length,
+    data?.[0]?.review_status === "draft_imported" && importedRoleCoreCount < 2,
   );
 
   async function runEvaluation() {
@@ -152,22 +143,9 @@ export default function EvaluationCardPage() {
             {position.snapshot_date && ` · дата среза ${position.snapshot_date}`}
           </div>
           {scope.length > 0 && <div className="num mt-1 text-sm text-muted">{scope.join(" · ")}</div>}
-          <div className="mt-3 flex flex-wrap items-center gap-4">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted">
             {evaluation ? (
               <>
-                <StatusDot color={STATUS_DOT[evaluation.status]}>
-                  {STATUS_LABEL[evaluation.status]}
-                </StatusDot>
-                {evaluation.qc_flags.some((f) => f.status === "warn") && (
-                  <a href="#qc-flags" title="Перейти к QC-проверкам">
-                    <StatusDot color="amber">
-                      ⚠ {evaluation.qc_flags.filter((f) => f.status === "warn").length} замечаний QC
-                    </StatusDot>
-                  </a>
-                )}
-                <StatusDot color={CONF_DOT[evaluation.confidence]}>
-                  Уверенность: {CONFIDENCE_LABEL[evaluation.confidence].toLowerCase()}
-                </StatusDot>
                 {evaluation.is_final && <StatusDot color="green">✓ Финальная версия</StatusDot>}
                 {versions.length > 1 ? (
                   <select
@@ -192,8 +170,9 @@ export default function EvaluationCardPage() {
             ) : (
               <StatusDot color="gray">Предварительная оценка ещё не проводилась</StatusDot>
             )}
-            <div className="flex items-center gap-2 print:hidden">
-              <Button disabled={evaluating} onClick={runEvaluation}>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
+              <Button variant="secondary" disabled={evaluating} onClick={runEvaluation}>
                 {needsDraftReview
                   ? "Дополнить досье"
                   : evaluating
@@ -222,7 +201,6 @@ export default function EvaluationCardPage() {
                   PDF
                 </Button>
               )}
-            </div>
           </div>
         </div>
       </div>
@@ -245,6 +223,8 @@ export default function EvaluationCardPage() {
         </Card>
       )}
 
+      {evaluation && <EvaluationStatusHero evaluation={evaluation} />}
+
       {position.review_status === "draft_imported" && position.import_metadata && (
         <Card className="border-warn/30 p-5">
           <div className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
@@ -264,13 +244,15 @@ export default function EvaluationCardPage() {
             </div>
             <div className="space-y-2 text-sm">
               <div className="text-muted">Источник: {position.import_metadata.source_filename ?? "—"}</div>
-              <div className="text-muted">Метод: {position.import_metadata.extraction_method}</div>
+              <div className="text-muted">{extractionMethodLabel(position.import_metadata.extraction_method)}</div>
               {position.import_metadata.missing_fields.length > 0 && (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted">Не найдено в документе</div>
-                  <div className="mt-1 text-sm">
-                    {position.import_metadata.missing_fields.join(", ")}
-                  </div>
+                  <div className="text-xs font-medium text-muted">Можно дополнить, если данные доступны:</div>
+                  <ul className="mt-2 grid gap-x-5 gap-y-1 text-sm sm:grid-cols-2">
+                    {position.import_metadata.missing_fields.map((field) => (
+                      <li key={field} className="flex gap-2"><span className="text-warn">•</span>{importFieldLabel(field)}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
               <Link to={`/positions/${id}/edit`}>
@@ -278,31 +260,6 @@ export default function EvaluationCardPage() {
                   Проверить и дополнить
                 </Button>
               </Link>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <DossierPreview position={position} onChanged={reload} />
-
-      {evaluation && (
-        <Card className="border-accent/20 p-5">
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-muted">Что означает статус</div>
-              <p className="mt-2 text-sm leading-relaxed text-[rgb(var(--fg)/0.78)]">
-                {STATUS_EXPLANATION[evaluation.status].summary}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <StatusDot color={STATUS_EXPLANATION[evaluation.status].tone}>
-                {evaluation.status === "ready"
-                  ? "Готово к комитету"
-                  : evaluation.status === "needs_clarification"
-                    ? "Требуются уточнения"
-                    : "Оценка невозможна"}
-              </StatusDot>
-              <p className="text-xs text-muted">{STATUS_EXPLANATION[evaluation.status].nextStep}</p>
             </div>
           </div>
         </Card>
@@ -317,6 +274,8 @@ export default function EvaluationCardPage() {
 
       {evaluation?.score && <ScoreView evaluation={evaluation} score={evaluation.score} onChanged={reload} />}
 
+      <DossierPreview position={position} onChanged={reload} />
+
       {evaluation && (
         <>
           {evaluation.role_summary && (
@@ -326,26 +285,12 @@ export default function EvaluationCardPage() {
             </Card>
           )}
 
-<div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card>
-              <div className="mb-3 text-sm font-semibold">Обоснование по факторам</div>
-              <p className="whitespace-pre-line text-[15px] leading-7">
-                {evaluation.reasoning || "—"}
-              </p>
-            </Card>
-            <Card>
-              <div className="mb-3 text-sm font-semibold">Вопросы на уточнение</div>
-              {evaluation.clarifying_questions.length > 0 ? (
-                <ol className="list-decimal space-y-2 pl-5 text-sm">
-                  {evaluation.clarifying_questions.map((q) => (
-                    <li key={q}>{q}</li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-sm text-muted">Нет — данных достаточно.</p>
-              )}
-            </Card>
-          </div>
+          <Card>
+            <div className="mb-3 text-sm font-semibold">Обоснование по факторам</div>
+            <p className="whitespace-pre-line text-[15px] leading-7">
+              {evaluation.reasoning || "—"}
+            </p>
+          </Card>
 
           <Card className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -377,6 +322,39 @@ const GATE_EDIT_STEP: Record<string, number> = {
   "Дата среза": 0,
   "Подтверждение руководителя / HR": 6,
 };
+
+function EvaluationStatusHero({ evaluation }: { evaluation: Evaluation }) {
+  return (
+    <Card className={cn(
+      "border-2 p-6",
+      evaluation.status === "ready" ? "border-ok/35 bg-ok/[0.045]" :
+        evaluation.status === "needs_clarification" ? "border-warn/45 bg-warn/[0.065]" :
+          "border-accent/40 bg-accent/[0.055]",
+    )}>
+      <div className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted">Решение для HR / C&amp;B</div>
+          <div className={cn(
+            "mt-2 text-2xl font-bold",
+            evaluation.status === "ready" ? "text-ok" : evaluation.status === "needs_clarification" ? "text-warn" : "text-accent",
+          )}>
+            {evaluation.status === "ready" ? "Готово к комитету" : evaluation.status === "needs_clarification" ? "Требуются уточнения" : "Оценка невозможна"}
+          </div>
+          <p className="mt-2 max-w-3xl text-[15px] leading-7 text-[rgb(var(--fg)/0.86)]">
+            {STATUS_EXPLANATION[evaluation.status].summary}
+          </p>
+        </div>
+        <div className="rounded-xl border border-current/10 bg-white/65 p-4 dark:bg-black/15">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            <span className="font-semibold text-accent">✗ {evaluation.qc_flags.filter((flag) => flag.status === "fail").length} блокирующих</span>
+            <span className="font-semibold text-warn">⚠ {evaluation.qc_flags.filter((flag) => flag.status === "warn").length} уточнений</span>
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[rgb(var(--fg)/0.78)]">{STATUS_EXPLANATION[evaluation.status].nextStep}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function ClarificationPanel({ positionId, evaluation }: { positionId: string; evaluation: Evaluation }) {
   const unresolved = evaluation.gate.checks.filter((check) => check.status !== "pass");
@@ -490,10 +468,10 @@ function DossierPreview({ position, onChanged }: { position: JobDossier; onChang
                 : null,
               position.import_metadata.source_sha256 ? `SHA-256: ${position.import_metadata.source_sha256}` : null,
               position.import_metadata.extraction_method
-                ? `Метод: ${position.import_metadata.extraction_method}`
+                ? extractionMethodLabel(position.import_metadata.extraction_method)
                 : null,
               ...Object.entries(position.import_metadata.field_sources ?? {}).map(
-                ([field, values]) => `${field}: ${values.join(" | ")}`,
+                ([field, values]) => `${importFieldLabel(field)}: ${values.join(" | ")}`,
               ),
             ].filter(Boolean) as string[],
           },
@@ -550,6 +528,25 @@ function DossierPreview({ position, onChanged }: { position: JobDossier; onChang
 
 // ── Полная карточка с расчётом ────────────────────────────────────────────────
 
+function groupClarifyingQuestions(questions: string[]): Record<FactorGroup | "general", string[]> {
+  const result: Record<FactorGroup | "general", string[]> = {
+    know_how: [], problem_solving: [], accountability: [], general: [],
+  };
+  for (const question of questions) {
+    const text = question.toLowerCase();
+    if (/полномоч|соглас|бюджет|capex|opex|масштаб|штат|подчин|ответствен|решает/.test(text)) {
+      result.accountability.push(question);
+    } else if (/кейс|сложн|неопредел|альтернатив|компромисс|нестандарт|trade.?off/.test(text)) {
+      result.problem_solving.push(question);
+    } else if (/знан|эксперт|коммуникац|переговор|домен|квалификац|функци/.test(text)) {
+      result.know_how.push(question);
+    } else {
+      result.general.push(question);
+    }
+  }
+  return result;
+}
+
 function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; score: ScoreResult; onChanged: () => void }) {
   const { data: levels } = useFactorLevelReference();
   const { data: levelRules } = useFactorLevelRules();
@@ -561,6 +558,7 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
   const codes = factorCodes(score);
   const rows = subfactorRows(score, levels ?? EMPTY_FACTOR_LEVELS, levelRules ?? EMPTY_FACTOR_RULES);
   const evidence = groupEvidence(score);
+  const clarificationQuestions = groupClarifyingQuestions(evaluation.clarifying_questions);
   const points: Record<FactorGroup, number> = {
     know_how: score.know_how.points,
     problem_solving: score.problem_solving.points,
@@ -577,17 +575,17 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
   return (
     <>
       {/* Summary */}
-      <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
-        <Summary
-          label="Итоговый балл"
-          value={String(score.total_points)}
-          note="Сумма трех факторов"
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Summary
           label="Грейд"
           value={String(score.grade)}
           big
           note={`${score.grade_lower}–${score.grade_upper} · ${score.grade_zone} зона`}
+        />
+        <Summary
+          label="Итоговый балл"
+          value={String(score.total_points)}
+          note="Сумма трёх факторов"
         />
         <SummaryProfile
           profile={score.profile}
@@ -595,10 +593,10 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
           long={score.profile_long}
           note="Форма роли: A / P / L"
         />
-        <SummaryBar
-          label="Уверенность"
-          pct={evaluation.confidence === "high" ? 85 : evaluation.confidence === "medium" ? 60 : 35}
-          note="Насколько надежны данные"
+        <ConfidenceSummary
+          confidence={evaluation.confidence}
+          failCount={evaluation.qc_flags.filter((flag) => flag.status === "fail").length}
+          warnCount={evaluation.qc_flags.filter((flag) => flag.status === "warn").length}
         />
       </div>
 
@@ -643,6 +641,7 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
             modifierReason={evidence[g].modifierReason}
             adjacentLevel={evidence[g].adjacentLevel}
             qcFlags={qcByGroup[g]}
+            questions={clarificationQuestions[g]}
             evaluationId={evaluation.id ?? null}
             editFields={factorEditFields(score)[g]}
             editOptions={factorEditOptions(score, levels ?? EMPTY_FACTOR_LEVELS)[g]}
@@ -650,6 +649,15 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
           />
         ))}
       </Card>
+
+      {clarificationQuestions.general.length > 0 && (
+        <Card className="border-warn/25 p-5">
+          <div className="text-sm font-semibold">Общие вопросы для уточнения</div>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-6">
+            {clarificationQuestions.general.map((question) => <li key={question}>{question}</li>)}
+          </ul>
+        </Card>
+      )}
 
       {/* Formula */}
       <Card>
@@ -679,11 +687,6 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
             <li key={index}>{line}</li>
           ))}
         </ol>
-        {score.methodology_basis && (
-          <p className="mt-4 border-t border-[rgb(var(--row-divider))] pt-3 text-xs leading-relaxed text-muted">
-            {score.methodology_basis}
-          </p>
-        )}
       </Card>
 
       {/* QC flags */}
@@ -700,10 +703,12 @@ function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; s
           <p className="text-sm text-muted">Проверки не выполнялись.</p>
         ) : (
           <div className="space-y-4">
-            <QcSection title="Блокирующие" color="red" items={evaluation.qc_flags.filter((q) => q.status === "fail")} />
+            <QcSection title="Блокирующие" color="red" positionId={evaluation.position_id} reviewMode items={evaluation.qc_flags.filter((q) => q.status === "fail")} />
             <QcSection
               title="Требуют уточнения"
               color="amber"
+              positionId={evaluation.position_id}
+              reviewMode
               items={evaluation.qc_flags.filter((q) => q.status === "warn")}
             />
             <details className="rounded-xl border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] px-4 py-3">
@@ -785,35 +790,79 @@ function SummaryProfile({
   long: string;
   note?: string;
 }) {
+  const cappedSteps = Math.min(steps, 4);
+  const markerPosition = profile === "L"
+    ? 50
+    : profile === "A"
+      ? 50 - (cappedSteps / 4) * 50
+      : 50 + (cappedSteps / 4) * 50;
+  const outsideRange = long.endsWith("*");
+
   return (
     <Card className="p-5">
       <div className="text-sm text-muted">Профиль</div>
-      <div className="mt-2 flex items-center gap-3">
-        <span className={cn("num text-3xl", long.endsWith("*") && "text-warn")}>{long || profile}</span>
-        <div className="flex-1">
-          <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--field-bg))]">
-            <div className="h-full bg-accent" style={{ width: `${Math.min(steps * 25, 100)}%` }} />
+      <div className="mt-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className={cn("num text-3xl font-semibold", outsideRange && "text-warn")}>{long || profile}</span>
+          <span className="text-xs text-muted">{PROFILE_LABEL[profile]}</span>
+        </div>
+
+        <div className="mt-5 px-1" aria-label={`Положение профиля: ${long || profile}`}>
+          <div className="relative h-3 rounded-full bg-[rgb(var(--row-divider))]">
+            <span className="absolute left-1/2 top-[-3px] h-[18px] w-px bg-[rgb(var(--fg)/0.35)]" />
+            {[0, 25, 75, 100].map((position) => (
+              <span
+                key={position}
+                className="absolute top-0 h-3 w-px bg-[rgb(var(--fg)/0.18)]"
+                style={{ left: `${position}%` }}
+              />
+            ))}
+            <span
+              className={cn(
+                "absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-accent shadow-[0_1px_5px_rgb(0_0_0/0.28)] dark:border-[#171717]",
+                outsideRange && "bg-warn ring-4 ring-warn/20",
+              )}
+              style={{ left: `${markerPosition}%` }}
+            />
           </div>
-          <div className="mt-1 text-xs text-muted">
-            {PROFILE_LABEL[profile]}
-            {long.endsWith("*") && " · вне пределов P4…A4"}
+          <div className="num mt-2 flex justify-between text-[11px] font-medium text-muted">
+            <span>A4</span>
+            <span>L</span>
+            <span>P4</span>
           </div>
         </div>
+
+        {outsideRange && (
+          <div className="mt-3 text-xs font-medium text-warn">
+            Разрыв {steps} {stepsWord(steps)}, допустимо ≤4
+          </div>
+        )}
       </div>
       {note && <div className="mt-2 text-xs text-muted">{note}</div>}
     </Card>
   );
 }
 
-function SummaryBar({ label, pct, note }: { label: string; pct: number; note?: string }) {
+function ConfidenceSummary({
+  confidence,
+  failCount,
+  warnCount,
+}: {
+  confidence: Confidence;
+  failCount: number;
+  warnCount: number;
+}) {
+  const tone = confidence === "high" ? "text-ok" : confidence === "medium" ? "text-warn" : "text-accent";
+  const reason = failCount > 0
+    ? `${failCount} блокирующих замечаний требуют подтверждения`
+    : warnCount > 0
+      ? `${warnCount} замечаний требуют проверки`
+      : "Критических замечаний по данным нет";
   return (
     <Card className="p-5">
-      <div className="text-sm text-muted">{label}</div>
-      <div className="num mt-2 text-3xl">{pct}%</div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full bg-[rgb(var(--field-bg))]">
-        <div className="h-full bg-ok" style={{ width: `${pct}%` }} />
-      </div>
-      {note && <div className="mt-2 text-xs text-muted">{note}</div>}
+      <div className="text-sm text-muted">Надёжность данных</div>
+      <div className={cn("mt-2 text-2xl font-bold", tone)}>{CONFIDENCE_LABEL[confidence]}</div>
+      <div className="mt-2 text-sm leading-5 text-muted">{reason}</div>
     </Card>
   );
 }
@@ -859,6 +908,24 @@ function factorEditOptions(
   };
 }
 
+function AttentionDetails({ initiallyOpen, rules }: { initiallyOpen: boolean; rules: string[] }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  return (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="mt-2 max-w-4xl text-sm leading-6 text-muted"
+    >
+      <summary className="cursor-pointer font-semibold text-[rgb(var(--fg)/0.72)]">
+        На что обратить внимание
+      </summary>
+      <ul className="mt-1.5 list-disc space-y-1 pl-4">
+        {rules.map((rule) => <li key={rule}>{rule}</li>)}
+      </ul>
+    </details>
+  );
+}
+
 function FactorGroupBlock({
   group,
   label,
@@ -873,6 +940,7 @@ function FactorGroupBlock({
   modifierReason,
   adjacentLevel,
   qcFlags,
+  questions,
   evaluationId,
   editFields,
   editOptions,
@@ -891,6 +959,7 @@ function FactorGroupBlock({
   modifierReason: string | null;
   adjacentLevel: string | null;
   qcFlags: QCFlag[];
+  questions: string[];
   evaluationId: string | null;
   editFields: Array<string | null>;
   editOptions: Array<Array<{ value: string; label: string }>>;
@@ -898,9 +967,10 @@ function FactorGroupBlock({
 }) {
   const failCount = qcFlags.filter((f) => f.status === "fail").length;
   const warnCount = qcFlags.filter((f) => f.status === "warn").length;
-  // Если по фактору есть блокирующее замечание, разворачиваем блок сразу —
-  // иначе рецензент может одобрить карточку, не заметив FAIL под счётчиком.
-  const [open, setOpen] = useState(() => failCount > 0);
+  const hasQcIssue = failCount > 0 || warnCount > 0;
+  // Проблемный фактор раскрываем при первом рендере для FAIL и WARN.
+  // После этого пользователь по-прежнему может свернуть его вручную.
+  const [open, setOpen] = useState(() => hasQcIssue);
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [nextLevel, setNextLevel] = useState("");
   const [editReason, setEditReason] = useState("");
@@ -942,8 +1012,8 @@ function FactorGroupBlock({
         className="flex w-full items-start gap-4 px-5 py-4 text-left transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035]"
       >
         <span className="flex-1 pr-3">
-          <span className="block text-xs font-semibold uppercase tracking-wide text-[rgb(var(--fg)/0.82)]">{label}</span>
-          <span className="mt-1 block text-xs text-muted">{hint}</span>
+          <span className="block text-sm font-semibold uppercase tracking-wide text-[rgb(var(--fg)/0.88)]">{label}</span>
+          <span className="mt-1 block text-sm leading-5 text-muted">{hint}</span>
         </span>
         {(failCount > 0 || warnCount > 0) && (
           <span className="mt-0.5 flex items-center gap-1.5 text-xs" title="QC-замечания по этому фактору — см. ниже">
@@ -976,25 +1046,16 @@ function FactorGroupBlock({
           className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 border-t border-[rgb(var(--row-divider))] px-5 py-4"
         >
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-fg">{r.name}</div>
-            <p className="mt-1 max-w-4xl text-sm leading-6 text-[rgb(var(--fg)/0.78)]">
+            <div className="text-[15px] font-semibold text-fg">{r.name}</div>
+            <p className="mt-1 max-w-4xl text-[15px] leading-7 text-[rgb(var(--fg)/0.84)]">
               {r.description}
             </p>
-            <p className="mt-2 max-w-4xl text-xs leading-5 text-muted">
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-muted">
               <span className="font-semibold text-[rgb(var(--fg)/0.72)]">Проверочный вопрос: </span>
               {r.expertCheck}
             </p>
             {r.rules.length > 0 && (
-              <details className="mt-2 max-w-4xl text-xs leading-5 text-muted">
-                <summary className="cursor-pointer font-semibold text-[rgb(var(--fg)/0.72)]">
-                  На что обратить внимание
-                </summary>
-                <ul className="mt-1.5 list-disc space-y-1 pl-4">
-                  {r.rules.map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
-              </details>
+              <AttentionDetails initiallyOpen={hasQcIssue} rules={r.rules} />
             )}
           </div>
           <div className="mt-0.5 min-w-16 text-right">
@@ -1053,7 +1114,7 @@ function FactorGroupBlock({
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="space-y-3 bg-[#faf9f6] px-9 pb-5 pt-4 text-sm leading-6 text-[rgb(var(--fg)/0.82)] dark:bg-white/[0.025]">
+            <div className="space-y-4 bg-[#faf9f6] px-7 pb-6 pt-5 text-[15px] leading-7 text-[rgb(var(--fg)/0.86)] dark:bg-white/[0.025] sm:px-9">
               <div className="text-xs font-semibold uppercase tracking-wide text-fg">Доказательства выбора уровня</div>
               <ul className="list-disc space-y-1.5 pl-5">
                 {evidence.length > 0 ? evidence.map((e) => <li key={e}>{e}</li>) : <li>—</li>}
@@ -1068,40 +1129,58 @@ function FactorGroupBlock({
                   </ul>
                 </>
               )}
-              <>
-                <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
-                  {hasModifier
-                    ? `Почему именно ${plusMinus > 0 ? "+" : "−"} (граничный модификатор)`
-                    : "Модификатор"}
+              {questions.length > 0 && (
+                <div className="rounded-xl border border-warn/30 bg-warn/[0.055] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-warn">Вопросы HR по этому фактору</div>
+                  <ul className="mt-2 list-disc space-y-1.5 pl-5">
+                    {questions.map((question) => <li key={question}>{question}</li>)}
+                  </ul>
                 </div>
-                {!hasModifier ? (
-                  <p className="text-[rgb(var(--fg)/0.78)]">
-                    Модификатор не применён — выбран базовый уровень ячейки.
-                  </p>
-                ) : modifierReason || adjacentLevel ? (
-                  <p className="text-[rgb(var(--fg)/0.82)]">
-                    {adjacentLevel && (
-                      <>
-                        Сравнивали с соседней ячейкой <span className="num font-semibold">{adjacentLevel}</span>.{" "}
-                      </>
-                    )}
-                    {modifierReason || "Причина границы не указана текстом."}
-                  </p>
-                ) : (
-                  <p className="text-warn">
-                    Модификатор применён, но эксперт/агент не указал ни соседний уровень, ни причину
-                    границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
-                  </p>
-                )}
-              </>
+              )}
+              {hasModifier && (
+                <>
+                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
+                    {`Почему именно ${plusMinus > 0 ? "+" : "−"} (граничный модификатор)`}
+                  </div>
+                  {modifierReason || adjacentLevel ? (
+                    <p className="text-[rgb(var(--fg)/0.82)]">
+                      {adjacentLevel && (
+                        <>
+                          Сравнивали с соседней ячейкой <span className="num font-semibold">{adjacentLevel}</span>.{" "}
+                        </>
+                      )}
+                      {modifierReason || "Причина границы не указана текстом."}
+                    </p>
+                  ) : (
+                    <p className="text-warn">
+                      Модификатор применён, но эксперт/агент не указал ни соседний уровень, ни причину
+                      границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
+                    </p>
+                  )}
+                </>
+              )}
               {qcFlags.length > 0 && (
                 <>
                   <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
                     QC-замечания по этому фактору
                   </div>
-                  <ul className="space-y-3">
-                    {qcFlags.map((flag) => (
-                      <QcItem key={flag.code} flag={flag} />
+                  <ul className="space-y-2">
+                    {qcFlags.map((flag, flagIndex) => (
+                      <li key={flag.code}>
+                        <a
+                          href={`#qc-${flag.code}`}
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium transition-colors hover:border-accent",
+                            flag.status === "fail" ? "border-accent/30 bg-accent/[0.045] text-accent" : "border-warn/30 bg-warn/[0.045] text-warn",
+                          )}
+                        >
+                          <span>
+                            {flag.status === "fail" ? "✗ Блокирующее замечание" : "⚠ Замечание"}
+                            {qcFlags.length > 1 ? ` ${flagIndex + 1}` : ""}
+                          </span>
+                          <span className="shrink-0 text-xs">См. QC ниже ↓</span>
+                        </a>
+                      </li>
                     ))}
                   </ul>
                 </>

@@ -124,12 +124,7 @@ def compute_score(
             f"{acc_points} (Accountability) = {total} баллов → грейд {band.grade} "
             f"(диапазон {band.lower}–{band.upper}, {zone.lower()} зона).",
         ],
-        methodology_basis=(
-            f"Баллы рассчитаны по подстановочным таблицам Hay Group (версия "
-            f"{table_set.table_version}, сверена {table_set.verified_date}) — официальным "
-            f"таблицам пересечения уровней методики, а не произвольной оценкой на глаз. "
-            f"Первоисточник для аудита: {table_set.source}."
-        ),
+        methodology_basis="",
         table_version=table_set.table_version,
     )
 
