@@ -1,55 +1,46 @@
-"""Тесты OpenAIAgent._parse: разбор function/tool-call ответа без обращения к сети."""
+"""Тесты OpenAIAgent._parse: разбор ответа Structured Outputs без обращения к сети.
+
+Раньше (function/tool calling без strict-схемы) OpenAI мог пропускать
+обязательные поля selections.* — отсюда переход на
+client.chat.completions.parse(response_format=AgentOutput), см. комментарий
+в jeval/agent/openai_agent.py. Эти тесты бьют по _parse, а не по реальному
+SDK-вызову, поэтому форму ответа (message.parsed/.refusal) задаём вручную.
+"""
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 
 import pytest
 
-from jeval.agent.agent import TOOL_NAME
 from jeval.agent.openai_agent import OpenAIAgent
 
 
-def _response_with_tool_calls(*calls) -> SimpleNamespace:
-    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=list(calls)))])
+def _completion(parsed=None, refusal=None) -> SimpleNamespace:
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(parsed=parsed, refusal=refusal))])
 
 
-def _tool_call(name: str, arguments: dict) -> SimpleNamespace:
-    return SimpleNamespace(function=SimpleNamespace(name=name, arguments=json.dumps(arguments)))
+def test_parse_returns_parsed_agent_output(sample_output):
+    completion = _completion(parsed=sample_output)
 
+    parsed = OpenAIAgent._parse(completion)
 
-def test_parse_extracts_tool_call_arguments(sample_output):
-    response = _response_with_tool_calls(
-        _tool_call(TOOL_NAME, sample_output.model_dump(mode="json"))
-    )
-
-    parsed = OpenAIAgent._parse(response)
-
-    assert parsed.role_summary == sample_output.role_summary
+    assert parsed is sample_output
     assert parsed.selections.know_how.specialization == sample_output.selections.know_how.specialization
 
 
-def test_parse_ignores_tool_call_with_other_name():
-    response = _response_with_tool_calls(_tool_call("other_tool", {"foo": "bar"}))
+def test_parse_raises_on_refusal():
+    completion = _completion(refusal="не могу выполнить запрос")
+
+    with pytest.raises(RuntimeError, match="отказался"):
+        OpenAIAgent._parse(completion)
+
+
+def test_parse_raises_when_parsed_is_none():
+    completion = _completion(parsed=None)
 
     with pytest.raises(RuntimeError, match="submit_evaluation"):
-        OpenAIAgent._parse(response)
-
-
-def test_parse_raises_without_tool_calls():
-    response = _response_with_tool_calls()
-
-    with pytest.raises(RuntimeError, match="submit_evaluation"):
-        OpenAIAgent._parse(response)
-
-
-def test_parse_raises_on_invalid_json_in_arguments():
-    bad_call = SimpleNamespace(function=SimpleNamespace(name=TOOL_NAME, arguments="{not valid json"))
-    response = _response_with_tool_calls(bad_call)
-
-    with pytest.raises(RuntimeError, match="невалидный JSON"):
-        OpenAIAgent._parse(response)
+        OpenAIAgent._parse(completion)
 
 
 def test_select_factors_requires_api_key(full_dossier, monkeypatch):

@@ -1,19 +1,26 @@
-"""OpenAI-агент: выбор уровней факторов через function/tool calling.
+"""OpenAI-агент: выбор уровней факторов через Structured Outputs.
 
-В отличие от Groq (который не гарантирует структурированный вывод и требует
-вытаскивать JSON из текста), Chat Completions API OpenAI поддерживает то же
-строгое tool-calling, что и Anthropic — модель обязана вернуть аргументы,
-соответствующие схеме AgentOutput, а не текст с JSON внутри.
+Раньше использовался обычный function/tool calling без strict-схемы (см. git
+history). В этом режиме OpenAI (в отличие от Anthropic tool_use) не гарантирует,
+что модель заполнит ВСЕ обязательные поля схемы — на практике уровни факторов
+(specialization/management/communication/area/complexity/freedom/magnitude)
+иногда пропускались, оставляя только evidence, что валилось в
+pydantic.ValidationError и превращалось в 500 при оценке (см. трейсбек:
+"Field required [type=missing]" для всех обязательных полей selections.*).
+
+client.chat.completions.parse(response_format=AgentOutput) — Structured
+Outputs — заставляет OpenAI строго соответствовать JSON-схеме Pydantic-модели
+на уровне API (strict-режим), а не только промпта, и сам валидирует/парсит
+ответ. Пропущенные обязательные поля становятся невозможны.
 """
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 
 from ..config import get_settings
 from ..domain.models import JobDossier
-from .agent import AgentOutput, TOOL_NAME, _tool_schema
+from .agent import AgentOutput
 from .prompt import SYSTEM_PROMPT, build_user_message
 
 
@@ -35,7 +42,7 @@ class OpenAIAgent:
         from openai import OpenAI
 
         client = OpenAI(api_key=self._api_key)
-        response = client.chat.completions.create(
+        completion = client.chat.completions.parse(
             model=self._model,
             max_completion_tokens=max_tokens,
             temperature=0,
@@ -43,32 +50,16 @@ class OpenAIAgent:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": build_user_message(dossier)},
             ],
-            tools=[
-                {
-                    "type": "function",
-                    "function": {
-                        "name": TOOL_NAME,
-                        "description": "Вернуть выбранные уровни факторов, доказательства, "
-                        "резюме, обоснование, вопросы и рекомендацию.",
-                        "parameters": _tool_schema(),
-                    },
-                }
-            ],
-            tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
+            response_format=AgentOutput,
         )
 
-        return self._parse(response)
+        return self._parse(completion)
 
     @staticmethod
-    def _parse(response: Any) -> AgentOutput:
-        message = response.choices[0].message
-        for call in message.tool_calls or []:
-            if call.function.name == TOOL_NAME:
-                try:
-                    data = json.loads(call.function.arguments)
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(
-                        f"OpenAI вернул невалидный JSON в аргументах инструмента: {exc}"
-                    ) from exc
-                return AgentOutput.model_validate(data)
-        raise RuntimeError("OpenAI не вернул вызов инструмента submit_evaluation.")
+    def _parse(completion: Any) -> AgentOutput:
+        message = completion.choices[0].message
+        if getattr(message, "refusal", None):
+            raise RuntimeError(f"OpenAI отказался выполнить запрос: {message.refusal}")
+        if message.parsed is None:
+            raise RuntimeError("OpenAI не вернул структурированный ответ (submit_evaluation).")
+        return message.parsed
