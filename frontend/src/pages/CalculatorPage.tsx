@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Button, Card, ErrorBanner, StatusDot } from "../components/ui";
+import { Button, Card, ErrorBanner, Input, StatusDot } from "../components/ui";
 import { QcSection } from "../components/QcFlags";
 import { api } from "../lib/api";
 import { useFactorLevelReference } from "../lib/factorLevels";
@@ -10,33 +10,46 @@ const MANAGEMENT = ["T", "I", "II", "III", "IV"];
 const NUMBERS_3 = ["1", "2", "3"];
 const COMPLEXITY = ["1", "2", "3", "4", "5"];
 const NON_QUANTITATIVE_IMPACT = ["I", "II", "III", "IV", "V", "VI"];
-const MODIFIERS = ["-1", "0", "1"];
+const MAGNITUDES = ["N", "1", "2", "3", "4"];
+const IMPACT_TYPES = ["R", "C", "S", "P"];
 
 interface CalculatorForm {
+  businessArea: string;
+  department: string;
+  jobTitle: string;
+  remarks: string;
   specialization: string;
   management: string;
   communication: string;
-  khModifier: string;
   area: string;
   complexity: string;
-  psModifier: string;
   freedom: string;
-  nonQuantitativeImpact: string;
-  accModifier: string;
+  magnitude: string;
+  impact: string;
 }
 
 const INITIAL: CalculatorForm = {
+  businessArea: "",
+  department: "",
+  jobTitle: "",
+  remarks: "",
   specialization: "E",
   management: "II",
   communication: "2",
-  khModifier: "0",
   area: "E",
   complexity: "3",
-  psModifier: "0",
   freedom: "E",
-  nonQuantitativeImpact: "IV",
-  accModifier: "0",
+  magnitude: "N",
+  impact: "IV",
 };
+
+const withBoundaries = (codes: string[]) =>
+  codes.flatMap((code) => [`${code}-`, code, `${code}+`]);
+
+const baseCode = (code: string) => code.replace(/[+-]$/, "");
+const boundary = (code: string) => code.endsWith("+") ? 1 : code.endsWith("-") ? -1 : 0;
+const aggregateBoundary = (...codes: string[]) =>
+  Math.max(-1, Math.min(1, codes.reduce((sum, code) => sum + boundary(code), 0)));
 
 /** "E" → "E — Зрелые профессиональные…"; без справочника (ещё не загрузился) — голый код. */
 function decodeWith(levels?: Record<string, string>) {
@@ -77,27 +90,49 @@ export default function CalculatorPage() {
 
       {error && <ErrorBanner message={error} />}
 
+      <Card className="p-5">
+        <div className="mb-4">
+          <h2 className="text-lg">Данные должности</h2>
+          <p className="mt-1 text-xs text-muted">
+            Поля соответствуют информационным колонкам листа Worksheet и не изменяют расчёт баллов.
+          </p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[0.8fr_1fr_1.4fr_1.2fr]">
+          <TextField label="Area · Направление" value={form.businessArea} onChange={(value) => set("businessArea", value)} />
+          <TextField label="Department · Подразделение" value={form.department} onChange={(value) => set("department", value)} />
+          <TextField label="Job title · Название должности" value={form.jobTitle} onChange={(value) => set("jobTitle", value)} placeholder="Введите название должности" />
+          <TextField label="Remarks · Примечание" value={form.remarks} onChange={(value) => set("remarks", value)} />
+        </div>
+      </Card>
+
       <div className="grid gap-5 xl:grid-cols-3">
         <FactorCard title="Знания и умения · Know-How">
-          <Select label="Специальные знания" value={form.specialization} options={LETTERS} optionLabel={decodeWith(levels?.specialized_know_how)} onChange={(v) => set("specialization", v)} />
-          <Select label="Планирование и интеграция" value={form.management} options={MANAGEMENT} optionLabel={decodeWith(levels?.managerial_know_how)} onChange={(v) => set("management", v)} />
+          <Select label="Специальные знания" value={form.specialization} options={withBoundaries(LETTERS)} optionLabel={decodeBoundaryWith(levels?.specialized_know_how)} onChange={(v) => set("specialization", v)} />
+          <Select label="Планирование и интеграция" value={form.management} options={withBoundaries(MANAGEMENT)} optionLabel={decodeBoundaryWith(levels?.managerial_know_how)} onChange={(v) => set("management", v)} />
           <Select label="Коммуникации" value={form.communication} options={NUMBERS_3} optionLabel={decodeWith(levels?.communication)} onChange={(v) => set("communication", v)} />
-          <Select label="Модификатор таблицы" value={form.khModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("khModifier", v)} />
         </FactorCard>
 
         <FactorCard title="Решение вопросов · Problem Solving">
-          <Select label="Область решаемых вопросов" value={form.area} options={LETTERS} optionLabel={decodeWith(levels?.problem_area)} onChange={(v) => set("area", v)} />
-          <Select label="Сложность" value={form.complexity} options={COMPLEXITY} optionLabel={decodeWith(levels?.problem_complexity)} onChange={(v) => set("complexity", v)} />
-          <Select label="Модификатор таблицы" value={form.psModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("psModifier", v)} />
+          <Select label="Область решаемых вопросов" value={form.area} options={withBoundaries(LETTERS)} optionLabel={decodeBoundaryWith(levels?.problem_area)} onChange={(v) => set("area", v)} />
+          <Select label="Сложность" value={form.complexity} options={withBoundaries(COMPLEXITY)} optionLabel={decodeBoundaryWith(levels?.problem_complexity)} onChange={(v) => set("complexity", v)} />
         </FactorCard>
 
         <FactorCard title="Ответственность · Accountability">
-          <Select label="Свобода действий" value={form.freedom} options={LETTERS} optionLabel={decodeWith(levels?.freedom_to_act)} onChange={(v) => set("freedom", v)} />
-          <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-subtle))] px-3 py-2 text-sm">
-            Величина воздействия: <span className="font-semibold">N · неколичественная</span>
-          </div>
-          <Select label="Уровень воздействия" value={form.nonQuantitativeImpact} options={NON_QUANTITATIVE_IMPACT} optionLabel={decodeWith(levels?.non_quantitative_impact)} onChange={(v) => set("nonQuantitativeImpact", v)} />
-          <Select label="Модификатор таблицы" value={form.accModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("accModifier", v)} />
+          <Select label="Свобода действий" value={form.freedom} options={withBoundaries(LETTERS)} optionLabel={decodeBoundaryWith(levels?.freedom_to_act)} onChange={(v) => set("freedom", v)} />
+          <Select
+            label="Величина воздействия"
+            value={form.magnitude}
+            options={withBoundaries(MAGNITUDES)}
+            onChange={(value) => {
+              set("magnitude", value);
+              set("impact", baseCode(value) === "N" ? "IV" : "C");
+            }}
+          />
+          {baseCode(form.magnitude) === "N" ? (
+            <Select label="Неколичественный уровень воздействия" value={form.impact} options={withBoundaries(NON_QUANTITATIVE_IMPACT)} optionLabel={decodeBoundaryWith(levels?.non_quantitative_impact)} onChange={(v) => set("impact", v)} />
+          ) : (
+            <Select label="Тип влияния" value={form.impact} options={withBoundaries(IMPACT_TYPES)} onChange={(v) => set("impact", v)} />
+          )}
         </FactorCard>
       </div>
 
@@ -106,7 +141,10 @@ export default function CalculatorPage() {
           {busy ? "Рассчитываем…" : "Рассчитать"}
         </Button>
         <p className="max-w-3xl text-xs leading-5 text-muted">
-          Корпоративное правило: доход и денежная величина не учитываются. Расчёт Accountability всегда использует ветку N и уровень I–VI.
+          Суффиксы −/+ соответствуют граничным значениям из Excel. Если несколько
+          суффиксов заданы в одном факторе, XLSM объединяет их в один шаг от − до +.
+          Для KMG DIGITAL рабочей является ветка N / I–VI; выбор 1–4 / R–P будет
+          рассчитан как в XLSM, но отмечен корпоративным QC.
         </p>
       </div>
 
@@ -141,19 +179,36 @@ function Select({ label, value, options, onChange, optionLabel }: {
   );
 }
 
+function TextField({ label, value, onChange, placeholder }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-medium text-muted">{label}</span>
+      <Input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
 function Result({ score, qcFlags }: { score: ScoreResult; qcFlags: QCFlag[] }) {
   const fails = qcFlags.filter((f) => f.status === "fail");
   const warns = qcFlags.filter((f) => f.status === "warn");
   const passes = qcFlags.filter((f) => f.status === "pass");
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <Card className="overflow-hidden p-0">
+        <div className="grid divide-y divide-[rgb(var(--row-divider))] sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-6">
         <Metric label="Know-How" value={score.know_how.points} />
         <Metric label={`Problem Solving · ${score.problem_solving.percentage}%`} value={score.problem_solving.points} />
         <Metric label="Accountability" value={score.accountability.points} />
-        <Metric label="Итоговый балл" value={score.total_points} />
-        <Metric label="Грейд / профиль" value={`${score.grade} · ${score.profile_long}`} />
-      </div>
+        <Metric label="Total" value={score.total_points} />
+        <Metric label="Grade" value={score.grade} />
+        <Metric label="Profile" value={score.profile_long} />
+        </div>
+      </Card>
       <Card>
         <h2 className="text-lg">Расшифровка расчёта</h2>
         <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6">
@@ -189,11 +244,14 @@ function Result({ score, qcFlags }: { score: ScoreResult; qcFlags: QCFlag[] }) {
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) {
-  return <Card className="bg-white p-5 dark:bg-white/5"><div className="text-xs text-muted">{label}</div><div className="num mt-2 text-3xl font-semibold">{value}</div></Card>;
+  return <div className="bg-white p-5 dark:bg-white/[0.025]"><div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div><div className="num mt-2 text-3xl font-bold text-accent">{value}</div></div>;
 }
 
-function modifierLabel(value: string): string {
-  return value === "1" ? "+" : value === "-1" ? "−" : "Без модификатора";
+function decodeBoundaryWith(levels?: Record<string, string>) {
+  return (code: string) => {
+    const base = baseCode(code);
+    return levels?.[base] ? `${code} — ${levels[base]}` : code;
+  };
 }
 
 function toSelections(form: CalculatorForm): FactorSelections {
@@ -201,24 +259,24 @@ function toSelections(form: CalculatorForm): FactorSelections {
   return {
     know_how: {
       ...evidence,
-      specialization: form.specialization,
-      management: form.management,
+      specialization: baseCode(form.specialization),
+      management: baseCode(form.management),
       communication: form.communication,
-      plus_minus: Number(form.khModifier),
+      plus_minus: aggregateBoundary(form.specialization, form.management),
     },
     problem_solving: {
       ...evidence,
-      area: form.area,
-      complexity: Number(form.complexity),
-      plus_minus: Number(form.psModifier),
+      area: baseCode(form.area),
+      complexity: Number(baseCode(form.complexity)),
+      plus_minus: aggregateBoundary(form.area, form.complexity),
     },
     accountability: {
       ...evidence,
-      freedom: form.freedom,
-      magnitude: "N",
-      impact: null,
-      non_quantitative_impact: form.nonQuantitativeImpact,
-      plus_minus: Number(form.accModifier),
+      freedom: baseCode(form.freedom),
+      magnitude: baseCode(form.magnitude),
+      impact: baseCode(form.magnitude) === "N" ? null : baseCode(form.impact),
+      non_quantitative_impact: baseCode(form.magnitude) === "N" ? baseCode(form.impact) : null,
+      plus_minus: aggregateBoundary(form.freedom, form.magnitude, form.impact),
     },
   };
 }
