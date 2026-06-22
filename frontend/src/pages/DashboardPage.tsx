@@ -146,14 +146,37 @@ export default function DashboardPage() {
     [],
   );
 
+  const latestEvaluations = useMemo(
+    () => latestByPosition(data?.[1] ?? []),
+    [data],
+  );
+
   const allRows = useMemo<PositionRow[]>(() => {
     if (!data) return [];
-    const [positions, evaluations] = data;
-    const latest = latestByPosition(evaluations);
+    const [positions] = data;
     return positions
-      .map((p) => toPositionRow(p, p.id ? latest.get(p.id) : undefined))
+      .map((p) => toPositionRow(p, p.id ? latestEvaluations.get(p.id) : undefined))
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-  }, [data]);
+  }, [data, latestEvaluations]);
+
+  const clarificationQueue = useMemo(() => {
+    if (!data) return [];
+    return data[0]
+      .map((position) => {
+        const evaluation = position.id ? latestEvaluations.get(position.id) : undefined;
+        const gateIssues = evaluation?.gate.checks.filter((check) => check.status !== "pass").length ?? 0;
+        const qcIssues = evaluation?.qc_flags.filter((flag) => flag.status !== "pass").length ?? 0;
+        const importedMissing = position.import_metadata?.missing_fields.length ?? 0;
+        const issueCount = Math.max(gateIssues + qcIssues, importedMissing);
+        const needsAttention =
+          position.review_status === "draft_imported" ||
+          evaluation?.status === "needs_clarification" ||
+          evaluation?.status === "cannot_evaluate";
+        return { position, evaluation, issueCount, needsAttention };
+      })
+      .filter((item) => item.needsAttention)
+      .sort((a, b) => b.issueCount - a.issueCount);
+  }, [data, latestEvaluations]);
 
   const statusCounts = useMemo(
     () =>
@@ -245,6 +268,47 @@ export default function DashboardPage() {
 
       {error && <ErrorBanner message={error} onRetry={reload} />}
       {importError && <ErrorBanner message={importError} />}
+
+      {clarificationQueue.length > 0 && (
+        <Card className="overflow-hidden border-warn/35 p-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[rgb(var(--row-divider))] bg-warn/[0.055] px-5 py-4">
+            <div>
+              <div className="text-sm font-semibold">Очередь уточнений</div>
+              <p className="mt-1 text-xs text-muted">
+                {clarificationQueue.length} должностей требуют подтверждения перед комитетом.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={() => navigate("/forms")}>Запросить данные у руководителя</Button>
+          </div>
+          <div className="divide-y divide-[rgb(var(--row-divider))]">
+            {clarificationQueue.slice(0, 5).map(({ position, evaluation, issueCount }) => (
+              <button
+                key={position.id}
+                type="button"
+                onClick={() => navigate(`/positions/${position.id}`)}
+                className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors hover:bg-black/[0.025] dark:hover:bg-white/[0.035]"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">{position.name}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted">
+                    {[position.dzo, position.department].filter(Boolean).join(" · ") || "Организация не указана"}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-4">
+                  {evaluation?.score && <span className="num text-sm font-bold text-accent">Грейд {evaluation.score.grade}</span>}
+                  <span className="num text-xs font-semibold text-warn">{issueCount || 1} уточн.</span>
+                  <span className="text-muted">→</span>
+                </div>
+              </button>
+            ))}
+          </div>
+          {clarificationQueue.length > 5 && (
+            <div className="border-t border-[rgb(var(--row-divider))] px-5 py-3 text-xs text-muted">
+              Ещё {clarificationQueue.length - 5} должностей — используйте фильтр «Требует уточнения» ниже.
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card
         className={cn("dashboard-upload overflow-hidden p-0 transition-colors", dragActive && "border-accent bg-[#faf7fd] dark:bg-purple-950/20")}

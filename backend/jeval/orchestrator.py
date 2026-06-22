@@ -91,6 +91,9 @@ class JobEvaluator:
         status = decide_status(gate.status, flags)
         recommendation = _committee_recommendation(status, score, flags)
 
+        gate_questions = [f"Уточните: {block}." for block in gate.missing_fields]
+        clarifying_questions = list(dict.fromkeys(gate_questions + out.clarifying_questions))
+
         return Evaluation(
             position_id=dossier.id,
             status=status,
@@ -102,7 +105,7 @@ class JobEvaluator:
             is_test_data=out.is_test_data,
             role_summary=out.role_summary,
             reasoning=out.reasoning,
-            clarifying_questions=out.clarifying_questions,
+            clarifying_questions=clarifying_questions,
             recommendation=recommendation,
             table_version=score.table_version,
         )

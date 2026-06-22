@@ -92,8 +92,21 @@ def evaluate_gate(dossier: JobDossier) -> GateResult:
         if not ok:
             warnings.append(block)
 
-    if missing_critical:
+    # Для предварительного расчёта достаточно содержательного ядра роли.
+    # Остальные пробелы не должны оставлять HR без результата: они переводят
+    # оценку в NEEDS_CLARIFICATION и блокируют только финальное утверждение.
+    # Полностью пустое/почти пустое описание по-прежнему не оцениваем.
+    role_core_count = sum(
+        (
+            bool(dossier.purpose and dossier.purpose.strip()),
+            bool(dossier.key_results),
+            bool(dossier.responsibilities),
+        )
+    )
+    if missing_critical and role_core_count < 2:
         status = EvaluationStatus.CANNOT_EVALUATE
+    elif missing_critical:
+        status = EvaluationStatus.NEEDS_CLARIFICATION
     elif warnings:
         status = EvaluationStatus.NEEDS_CLARIFICATION
     else:

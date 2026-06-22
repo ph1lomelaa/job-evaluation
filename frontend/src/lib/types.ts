@@ -281,6 +281,17 @@ export interface CalculateResponse {
   qc_flags: QCFlag[];
 }
 
+export interface EvaluationRange {
+  base_points: number;
+  base_grade: number;
+  min_points: number;
+  min_grade: number;
+  max_points: number;
+  max_grade: number;
+  uncertain_groups: FactorGroup[];
+  scenarios_checked: number;
+}
+
 export interface Evaluation {
   id?: string | null;
   position_id?: string | null;

@@ -192,6 +192,24 @@ def test_patch_evaluation_factor_recomputes_score_and_qc(client, full_dossier):
     assert refetched["score"]["total_points"] == data["score"]["total_points"]
 
 
+def test_evaluation_range_uses_adjacent_levels_for_uncertain_factors(client, full_dossier):
+    full_dossier.authorities.decides_alone = []
+    full_dossier.authorities.requires_approval = []
+    full_dossier.authorities.recommends = []
+    body = full_dossier.model_dump(mode="json", exclude_none=True)
+    body.pop("id", None)
+    pid = client.post("/api/positions", json=body).json()["id"]
+    ev = client.post("/api/evaluations", json={"position_id": pid}).json()
+
+    response = client.get(f"/api/evaluations/{ev['id']}/range")
+    assert response.status_code == 200
+    data = response.json()
+    assert "accountability" in data["uncertain_groups"]
+    assert data["min_points"] <= data["base_points"] <= data["max_points"]
+    assert data["min_grade"] <= data["base_grade"] <= data["max_grade"]
+    assert data["scenarios_checked"] > 1
+
+
 def test_patch_evaluation_rejects_field_outside_factor_group(client, full_dossier):
     body = full_dossier.model_dump(mode="json", exclude_none=True)
     body.pop("id", None)

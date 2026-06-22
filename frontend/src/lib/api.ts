@@ -8,6 +8,8 @@ import type {
   CompanyInviteSummary,
   DossierImportResult,
   Evaluation,
+  EvaluationRange,
+  FactorGroup,
   FactorLevelReference,
   FactorLevelRules,
   FactorSelections,
@@ -139,6 +141,14 @@ export const api = {
       body: JSON.stringify({ position_id: positionId }),
     }),
   getEvaluation: (id: string) => request<Evaluation>(`/api/evaluations/${id}`),
+  getEvaluationRange: (id: string) => request<EvaluationRange>(`/api/evaluations/${id}/range`),
+  patchEvaluationFactor: (
+    id: string,
+    body: { factor_group: FactorGroup; field: string; value: string | number; reason: string },
+  ) => request<Evaluation>(`/api/evaluations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  }),
   listEvaluations: (positionId?: string) =>
     request<Evaluation[]>(
       positionId ? `/api/evaluations?position_id=${encodeURIComponent(positionId)}` : "/api/evaluations",

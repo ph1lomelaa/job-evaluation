@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Button, Card, ErrorBanner, Field, Input, Skeleton, Stepper, Textarea } from "../components/ui";
 import { api } from "../lib/api";
 import { useFetch } from "../lib/useFetch";
@@ -243,7 +243,9 @@ function toDossier(f: FormState): JobDossier {
 export default function JobFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const isEdit = Boolean(id);
+  const requestedStep = clampStep(Number(searchParams.get("step") ?? 0));
   const { data: existing, error: loadError, loading } = useFetch(
     () => (id ? api.getPosition(id) : Promise.resolve(null)),
     [id],
@@ -268,11 +270,11 @@ export default function JobFormPage() {
   useEffect(() => {
     if (existing) {
       setF(formFromDossier(existing));
-      setStep(0);
+      setStep(requestedStep);
       setDraftRestored(false);
       setDraftSavedAt(null);
     }
-  }, [existing]);
+  }, [existing, requestedStep]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -362,8 +364,8 @@ export default function JobFormPage() {
         </Card>
       ) : null}
       <p className="max-w-[920px] text-sm text-muted">
-        Сначала заполните цель, результаты, полномочия, масштаб и KPI. Именно эти блоки решают,
-        можно ли вообще переходить к оценке.
+        Заполните известные факты. Если часть данных отсутствует, система всё равно рассчитает
+        предварительный результат и отдельно покажет, что требуется подтвердить.
       </p>
 
       {loadError && <ErrorBanner message={loadError} />}
@@ -534,15 +536,24 @@ export default function JobFormPage() {
             </>
           )}
 
-          <div className="flex justify-between pt-2">
+          <div className="flex flex-wrap justify-between gap-3 pt-2">
             <Button variant="secondary" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
               Назад
             </Button>
-            {step < STEPS.length - 1 ? (
+            {isEdit ? (
+              <div className="flex flex-wrap gap-3">
+                {step < STEPS.length - 1 && (
+                  <Button variant="secondary" onClick={() => setStep((s) => s + 1)}>Далее</Button>
+                )}
+                <Button disabled={noName || busy !== null} onClick={onSave}>
+                  {busy === "save" ? "Сохранение…" : "Сохранить изменения"}
+                </Button>
+              </div>
+            ) : step < STEPS.length - 1 ? (
               <Button onClick={() => setStep((s) => s + 1)}>Далее</Button>
             ) : (
               <Button disabled={noName || busy !== null} onClick={onSave}>
-                {busy === "save" ? "Сохранение…" : isEdit ? "Сохранить проверенное досье" : "Сохранить досье"}
+                {busy === "save" ? "Сохранение…" : "Сохранить досье"}
               </Button>
             )}
           </div>

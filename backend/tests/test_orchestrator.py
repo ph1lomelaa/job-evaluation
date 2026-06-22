@@ -59,6 +59,18 @@ def test_gate_fail_skips_agent(fake_agent):
     assert ev.clarifying_questions  # есть что запросить
 
 
+def test_incomplete_but_substantive_role_still_gets_preliminary_score(full_dossier, fake_agent):
+    full_dossier.authorities.decides_alone = []
+    full_dossier.authorities.requires_approval = []
+    full_dossier.authorities.recommends = []
+    ev = JobEvaluator(agent=fake_agent).evaluate(full_dossier)
+    assert ev.status == EvaluationStatus.NEEDS_CLARIFICATION
+    assert ev.score is not None
+    assert ev.confidence == Confidence.LOW
+    assert any("Полномочия" in question for question in ev.clarifying_questions)
+    assert any(flag.code == "authorities_assumed" for flag in ev.qc_flags)
+
+
 # ── _downgrade(): понижение уверенности при QC-замечаниях ────────────────────
 
 

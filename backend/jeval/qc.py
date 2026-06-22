@@ -200,6 +200,7 @@ def run_qc(
             + [item.item for item in dossier.authorities.requires_approval]
             + dossier.authorities.recommends
         )
+        has_authorities = bool(authority_texts)
         assumed_authority = any(AUTHORITY_ASSUMPTION_MARKER in t for t in authority_texts)
         authority_sections = [
             label
@@ -216,7 +217,7 @@ def run_qc(
         flags.append(
             _flag(
                 "authorities_assumed", QCSeverity.HIGH,
-                QCStatus.FAIL if assumed_authority else QCStatus.PASS,
+                QCStatus.FAIL if not has_authorities or assumed_authority else QCStatus.PASS,
                 (
                     "В исходном документе не найдены явные полномочия. Разделы «"
                     + "», «".join(authority_sections)
@@ -224,6 +225,12 @@ def run_qc(
                     "подтверждёнными фактами. Поэтому свободу действий D пока нельзя "
                     "считать доказанной."
                 ) if assumed_authority
+                else (
+                    "В досье отсутствует разделение полномочий: что роль решает "
+                    "самостоятельно, что согласует и что только рекомендует. "
+                    "Accountability рассчитана предварительно по обязанностям и "
+                    "организационному контексту."
+                ) if not has_authorities
                 else "Полномочия не помечены как предположение",
                 "Для каждого блока указать конкретные примеры: что роль решает сама, "
                 "какие решения и с кем согласует, что только рекомендует. Затем заменить "

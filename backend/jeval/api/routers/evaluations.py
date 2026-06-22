@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from itertools import product
 from typing import Literal, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,6 +15,17 @@ from ...domain.models import (
     JobDossier,
     KnowHowSelection,
     ProblemSolvingSelection,
+    FactorSelections,
+)
+from ...domain.enums import (
+    Communication,
+    FreedomToAct,
+    ImpactType,
+    ManagerialKnowHow,
+    NonQuantitativeImpact,
+    ProblemArea,
+    ProblemComplexity,
+    SpecializedKnowHow,
 )
 from ...hierarchy import run_hierarchy_qc
 from ...orchestrator import JobEvaluator, _committee_recommendation, _downgrade, decide_status
@@ -44,6 +56,17 @@ _OVERRIDABLE_FIELDS: dict[FactorGroupName, set[str]] = {
 
 class EvaluateRequest(BaseModel):
     position_id: str
+
+
+class EvaluationRangeResponse(BaseModel):
+    base_points: int
+    base_grade: int
+    min_points: int
+    min_grade: int
+    max_points: int
+    max_grade: int
+    uncertain_groups: list[FactorGroupName]
+    scenarios_checked: int
 
 
 @router.post("", response_model=Evaluation, status_code=201)
@@ -88,6 +111,43 @@ def get_evaluation(
     if not ev:
         raise HTTPException(404, "Оценка не найдена")
     return _with_author_name(ev, store)
+
+
+@router.get("/{evaluation_id}/range", response_model=EvaluationRangeResponse)
+def get_evaluation_range(
+    evaluation_id: str,
+    ctx: WorkspaceContext = Depends(workspace_context),
+    store: Store = Depends(get_store),
+) -> EvaluationRangeResponse:
+    """Диапазон результата при сдвиге неподтверждённых подфакторов на один
+    соседний уровень. Это не новый грейд, а прозрачная чувствительность текущей
+    оценки: показывает HR, насколько незакрытые вопросы реально влияют на итог."""
+    evaluation = store.get_evaluation(evaluation_id, ctx.company_id)
+    if not evaluation or evaluation.selections is None or evaluation.score is None:
+        raise HTTPException(404, "Оценка с рассчитанными уровнями не найдена")
+
+    uncertain = _uncertain_factor_groups(evaluation)
+    dimensions = _adjacent_dimensions(evaluation.selections, uncertain)
+    scores = [evaluation.score]
+    for values in product(*(dimension[2] for dimension in dimensions)):
+        selections = evaluation.selections.model_copy(deep=True)
+        for (group, field, _), value in zip(dimensions, values):
+            selection = getattr(selections, group)
+            setattr(selection, field, value)
+        scores.append(compute_score(selections))
+
+    lowest = min(scores, key=lambda item: item.total_points)
+    highest = max(scores, key=lambda item: item.total_points)
+    return EvaluationRangeResponse(
+        base_points=evaluation.score.total_points,
+        base_grade=evaluation.score.grade,
+        min_points=lowest.total_points,
+        min_grade=lowest.grade,
+        max_points=highest.total_points,
+        max_grade=highest.grade,
+        uncertain_groups=sorted(uncertain),
+        scenarios_checked=len(scores),
+    )
 
 
 @router.post("/{evaluation_id}/finalize", response_model=Evaluation)
@@ -197,6 +257,78 @@ def patch_evaluation_factor(
         {"factor_group": req.factor_group, "field": req.field},
     )
     return _with_author_name(result, store)
+
+
+_GROUP_GATE_MARKERS: dict[FactorGroupName, tuple[str, ...]] = {
+    "know_how": ("Цель должности", "Описание функций", "Оргконтекст"),
+    "problem_solving": ("Типовые кейсы", "Описание функций", "Оргконтекст"),
+    "accountability": ("Полномочия", "Масштаб воздействия", "KPI", "Лимиты"),
+}
+
+
+def _uncertain_factor_groups(evaluation: Evaluation) -> set[FactorGroupName]:
+    groups: set[FactorGroupName] = set()
+    if evaluation.selections is None:
+        return groups
+    for group in ("know_how", "problem_solving", "accountability"):
+        selection = getattr(evaluation.selections, group)
+        if selection.confidence.value != "high" or selection.doubts:
+            groups.add(group)
+    for flag in evaluation.qc_flags:
+        if flag.status.value == "pass":
+            continue
+        groups.update(group for group in flag.factor_groups if group in _SELECTION_MODEL_BY_GROUP)
+    for check in evaluation.gate.checks:
+        if check.status.value == "pass":
+            continue
+        for group, markers in _GROUP_GATE_MARKERS.items():
+            if any(marker in check.block for marker in markers):
+                groups.add(group)
+    return groups
+
+
+def _neighbors(current, ordered: list) -> list:
+    index = ordered.index(current)
+    start = max(0, index - 1)
+    end = min(len(ordered), index + 2)
+    return ordered[start:end]
+
+
+def _adjacent_dimensions(
+    selections: FactorSelections,
+    uncertain: set[FactorGroupName],
+) -> list[tuple[FactorGroupName, str, list]]:
+    dimensions: list[tuple[FactorGroupName, str, list]] = []
+    if "know_how" in uncertain:
+        dimensions.extend((
+            ("know_how", "specialization", _neighbors(selections.know_how.specialization, list(SpecializedKnowHow))),
+            ("know_how", "management", _neighbors(selections.know_how.management, list(ManagerialKnowHow))),
+            ("know_how", "communication", _neighbors(selections.know_how.communication, list(Communication))),
+        ))
+    if "problem_solving" in uncertain:
+        dimensions.extend((
+            ("problem_solving", "area", _neighbors(selections.problem_solving.area, list(ProblemArea))),
+            ("problem_solving", "complexity", _neighbors(selections.problem_solving.complexity, list(ProblemComplexity))),
+        ))
+    if "accountability" in uncertain:
+        dimensions.append((
+            "accountability", "freedom",
+            _neighbors(selections.accountability.freedom, list(FreedomToAct)),
+        ))
+        if selections.accountability.non_quantitative_impact is not None:
+            dimensions.append((
+                "accountability", "non_quantitative_impact",
+                _neighbors(
+                    selections.accountability.non_quantitative_impact,
+                    list(NonQuantitativeImpact),
+                ),
+            ))
+        elif selections.accountability.impact is not None:
+            dimensions.append((
+                "accountability", "impact",
+                _neighbors(selections.accountability.impact, list(ImpactType)),
+            ))
+    return dimensions
 
 
 def _with_author_name(evaluation: Evaluation, store: Store) -> Evaluation:

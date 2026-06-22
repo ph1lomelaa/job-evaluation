@@ -308,10 +308,14 @@ export default function EvaluationCardPage() {
         </Card>
       )}
 
+      {evaluation && (
+        <ClarificationPanel positionId={id} evaluation={evaluation} />
+      )}
 
 
 
-      {evaluation?.score && <ScoreView evaluation={evaluation} score={evaluation.score} />}
+
+      {evaluation?.score && <ScoreView evaluation={evaluation} score={evaluation.score} onChanged={reload} />}
 
       {evaluation && (
         <>
@@ -357,6 +361,76 @@ export default function EvaluationCardPage() {
     </div>
   );
 }
+
+const GATE_EDIT_STEP: Record<string, number> = {
+  "Цель должности": 1,
+  "Ключевые результаты": 1,
+  "Описание функций": 1,
+  "KPI / показатели блока": 1,
+  "Полномочия (сам/согласует/рекомендует)": 2,
+  "Лимиты (бюджет, закупки, штат, stop-work)": 2,
+  "Масштаб воздействия": 3,
+  "Стейкхолдеры": 3,
+  "Якорные должности": 4,
+  "Типовые кейсы (Problem Solving)": 4,
+  "Оргконтекст": 5,
+  "Дата среза": 0,
+  "Подтверждение руководителя / HR": 6,
+};
+
+function ClarificationPanel({ positionId, evaluation }: { positionId: string; evaluation: Evaluation }) {
+  const unresolved = evaluation.gate.checks.filter((check) => check.status !== "pass");
+  if (unresolved.length === 0 && evaluation.clarifying_questions.length === 0) return null;
+
+  const blocking = unresolved.filter((check) => check.status === "fail");
+  const recommended = unresolved.filter((check) => check.status === "warn");
+
+  return (
+    <Card className="border-warn/35 p-0 overflow-hidden">
+      <div className="border-b border-[rgb(var(--row-divider))] bg-warn/[0.06] px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Что уточнить для надёжной оценки</div>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--fg)/0.72)]">
+              Предварительный расчёт уже доступен. Дополняйте только те блоки, которые могут изменить уровни или уверенность.
+            </p>
+          </div>
+          <span className="num text-xs font-semibold text-warn">
+            {unresolved.length} {unresolved.length === 1 ? "пункт" : "пунктов"}
+          </span>
+        </div>
+      </div>
+
+      <div className="divide-y divide-[rgb(var(--row-divider))]">
+        {[...blocking, ...recommended].map((check) => {
+          const step = GATE_EDIT_STEP[check.block] ?? 0;
+          return (
+            <div key={check.block} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className={cn("num mt-0.5 text-xs font-bold", check.status === "fail" ? "text-accent" : "text-warn")}>
+                  {check.status === "fail" ? "✗" : "⚠"}
+                </span>
+                <div>
+                  <div className="text-sm font-medium">{check.block}</div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {check.status === "fail" ? "Расчёт использует предположение — требуется подтверждение" : "Желательно для повышения уверенности"}
+                  </div>
+                </div>
+              </div>
+              <Link
+                to={`/positions/${positionId}/edit?step=${step}`}
+                className="shrink-0 rounded-lg border border-[rgb(var(--field-border))] px-3 py-2 text-xs font-medium transition-colors hover:border-accent hover:text-accent"
+              >
+                Дополнить
+              </Link>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function DossierPreview({ position, onChanged }: { position: JobDossier; onChanged: () => void }) {
   const [inferring, setInferring] = useState(false);
   const [inferError, setInferError] = useState<string | null>(null);
@@ -476,9 +550,13 @@ function DossierPreview({ position, onChanged }: { position: JobDossier; onChang
 
 // ── Полная карточка с расчётом ────────────────────────────────────────────────
 
-function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: ScoreResult }) {
+function ScoreView({ evaluation, score, onChanged }: { evaluation: Evaluation; score: ScoreResult; onChanged: () => void }) {
   const { data: levels } = useFactorLevelReference();
   const { data: levelRules } = useFactorLevelRules();
+  const { data: scoreRange } = useFetch(
+    () => evaluation.id ? api.getEvaluationRange(evaluation.id) : Promise.resolve(null),
+    [evaluation.id, score.total_points],
+  );
   const groups: FactorGroup[] = ["know_how", "problem_solving", "accountability"];
   const codes = factorCodes(score);
   const rows = subfactorRows(score, levels ?? EMPTY_FACTOR_LEVELS, levelRules ?? EMPTY_FACTOR_RULES);
@@ -524,11 +602,35 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
         />
       </div>
 
+      {scoreRange && (scoreRange.min_grade !== scoreRange.max_grade || scoreRange.min_points !== scoreRange.max_points) && (
+        <Card className="border-warn/35 bg-warn/[0.045] p-5">
+          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-warn">Чувствительность предварительной оценки</div>
+              <p className="mt-2 text-sm leading-6 text-[rgb(var(--fg)/0.82)]">
+                При сдвиге только неподтверждённых подфакторов на один соседний уровень результат находится в диапазоне
+                <span className="num font-semibold"> {scoreRange.min_points}–{scoreRange.max_points} баллов</span> и
+                <span className="num font-semibold"> {scoreRange.min_grade}–{scoreRange.max_grade} грейд</span>.
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Проверено сценариев: {scoreRange.scenarios_checked}. Это диапазон чувствительности, а не автоматически выбранный грейд.
+              </p>
+            </div>
+            <div className="rounded-xl border border-warn/30 bg-white/70 px-5 py-3 text-center dark:bg-black/15">
+              <div className="text-xs text-muted">Основной результат</div>
+              <div className="num mt-1 text-2xl font-bold text-accent">{score.grade}</div>
+              <div className="num text-xs text-muted">{score.total_points} баллов</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Factor table */}
       <Card className="p-0">
         {groups.map((g) => (
           <FactorGroupBlock
             key={g}
+            group={g}
             label={FACTOR_GROUP_LABEL[g]}
             hint={FACTOR_HINTS[g]}
             code={codes[g]}
@@ -541,6 +643,10 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
             modifierReason={evidence[g].modifierReason}
             adjacentLevel={evidence[g].adjacentLevel}
             qcFlags={qcByGroup[g]}
+            evaluationId={evaluation.id ?? null}
+            editFields={factorEditFields(score)[g]}
+            editOptions={factorEditOptions(score, levels ?? EMPTY_FACTOR_LEVELS)[g]}
+            onChanged={onChanged}
           />
         ))}
       </Card>
@@ -712,7 +818,49 @@ function SummaryBar({ label, pct, note }: { label: string; pct: number; note?: s
   );
 }
 
+function factorEditFields(score: ScoreResult): Record<FactorGroup, Array<string | null>> {
+  return {
+    know_how: ["specialization", "management", "communication"],
+    problem_solving: ["area", "complexity"],
+    accountability: [
+      "freedom",
+      null, // В KMG DIGITAL ветка N фиксирована корпоративным правилом.
+      score.accountability.selection.non_quantitative_impact ? "non_quantitative_impact" : "impact",
+    ],
+  };
+}
+
+function levelOptions(record: Record<string, string>): Array<{ value: string; label: string }> {
+  return Object.entries(record).map(([value, label]) => ({ value, label }));
+}
+
+function factorEditOptions(
+  score: ScoreResult,
+  levels: typeof EMPTY_FACTOR_LEVELS,
+): Record<FactorGroup, Array<Array<{ value: string; label: string }>>> {
+  const accountabilityImpact = score.accountability.selection.non_quantitative_impact
+    ? levels.non_quantitative_impact
+    : levels.impact_type;
+  return {
+    know_how: [
+      levelOptions(levels.specialized_know_how),
+      levelOptions(levels.managerial_know_how),
+      levelOptions(levels.communication),
+    ],
+    problem_solving: [
+      levelOptions(levels.problem_area),
+      levelOptions(levels.problem_complexity),
+    ],
+    accountability: [
+      levelOptions(levels.freedom_to_act),
+      [],
+      levelOptions(accountabilityImpact),
+    ],
+  };
+}
+
 function FactorGroupBlock({
+  group,
   label,
   hint,
   code,
@@ -725,7 +873,12 @@ function FactorGroupBlock({
   modifierReason,
   adjacentLevel,
   qcFlags,
+  evaluationId,
+  editFields,
+  editOptions,
+  onChanged,
 }: {
+  group: FactorGroup;
   label: string;
   hint: string;
   code: string;
@@ -738,13 +891,50 @@ function FactorGroupBlock({
   modifierReason: string | null;
   adjacentLevel: string | null;
   qcFlags: QCFlag[];
+  evaluationId: string | null;
+  editFields: Array<string | null>;
+  editOptions: Array<Array<{ value: string; label: string }>>;
+  onChanged: () => void;
 }) {
   const failCount = qcFlags.filter((f) => f.status === "fail").length;
   const warnCount = qcFlags.filter((f) => f.status === "warn").length;
   // Если по фактору есть блокирующее замечание, разворачиваем блок сразу —
   // иначе рецензент может одобрить карточку, не заметив FAIL под счётчиком.
   const [open, setOpen] = useState(() => failCount > 0);
+  const [editingRow, setEditingRow] = useState<number | null>(null);
+  const [nextLevel, setNextLevel] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [savingLevel, setSavingLevel] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const hasModifier = plusMinus !== 0;
+
+  function beginEdit(index: number, currentLevel: string) {
+    setEditingRow(index);
+    setNextLevel(currentLevel);
+    setEditReason("");
+    setEditError(null);
+  }
+
+  async function saveLevel(index: number) {
+    const field = editFields[index];
+    if (!evaluationId || !field || !editReason.trim()) return;
+    setSavingLevel(true);
+    setEditError(null);
+    try {
+      await api.patchEvaluationFactor(evaluationId, {
+        factor_group: group,
+        field,
+        value: field === "complexity" ? Number(nextLevel) : nextLevel,
+        reason: editReason.trim(),
+      });
+      setEditingRow(null);
+      onChanged();
+    } catch (reason) {
+      setEditError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSavingLevel(false);
+    }
+  }
   return (
     <div className="border-t border-[rgb(var(--row-divider))] first:border-t-0">
       <button
@@ -780,7 +970,7 @@ function FactorGroupBlock({
             означает методологический модификатор границы, нельзя путать. */}
         <span className={cn("mt-1 w-4 text-center text-muted transition-transform", open && "rotate-180")}>▾</span>
       </button>
-      {rows.map((r) => (
+      {rows.map((r, rowIndex) => (
         <div
           key={r.name}
           className="grid grid-cols-[minmax(0,1fr)_auto] gap-5 border-t border-[rgb(var(--row-divider))] px-5 py-4"
@@ -807,9 +997,51 @@ function FactorGroupBlock({
               </details>
             )}
           </div>
-          <span className="num mt-0.5 min-w-10 text-center text-xl font-bold leading-none text-accent">
-            {r.level}
-          </span>
+          <div className="mt-0.5 min-w-16 text-right">
+            {editFields[rowIndex] && evaluationId ? (
+              <button
+                type="button"
+                title="Изменить уровень и сразу пересчитать оценку"
+                onClick={() => beginEdit(rowIndex, r.level)}
+                className="num text-xl font-bold leading-none text-accent underline decoration-accent/25 underline-offset-4 transition hover:decoration-accent"
+              >
+                {r.level}
+              </button>
+            ) : (
+              <span className="num text-xl font-bold leading-none text-accent">{r.level}</span>
+            )}
+          </div>
+          {editingRow === rowIndex && (
+            <div className="col-span-2 rounded-xl border border-accent/25 bg-accent/[0.035] p-4">
+              <div className="grid gap-3 md:grid-cols-[minmax(180px,0.55fr)_minmax(260px,1fr)_auto] md:items-end">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">Новый уровень</span>
+                  <select className="field" value={nextLevel} onChange={(event) => setNextLevel(event.target.value)}>
+                    {editOptions[rowIndex].map((option) => (
+                      <option key={option.value} value={option.value}>{option.value} — {option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted">Основание изменения</span>
+                  <input
+                    className="field"
+                    value={editReason}
+                    onChange={(event) => setEditReason(event.target.value)}
+                    placeholder="Какой факт подтверждает новый уровень?"
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <Button disabled={savingLevel || !editReason.trim() || nextLevel === r.level} onClick={() => void saveLevel(rowIndex)}>
+                    {savingLevel ? "Сохраняем…" : "Применить"}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setEditingRow(null)}>Отмена</Button>
+                </div>
+              </div>
+              {editError && <p className="mt-2 text-xs text-accent">{editError}</p>}
+              <p className="mt-2 text-xs text-muted">Баллы, грейд, профиль и QC пересчитаются автоматически. Основание сохранится в аудите оценки.</p>
+            </div>
+          )}
         </div>
       ))}
       <AnimatePresence>

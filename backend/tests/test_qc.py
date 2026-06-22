@@ -73,6 +73,17 @@ def test_authorities_from_document_passes(full_dossier, sample_output):
     assert _flag(flags, "authorities_assumed").status == QCStatus.PASS
 
 
+def test_missing_authorities_fails_but_allows_preliminary_score(full_dossier, sample_output):
+    full_dossier.authorities.decides_alone = []
+    full_dossier.authorities.requires_approval = []
+    full_dossier.authorities.recommends = []
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    flag = _flag(flags, "authorities_assumed")
+    assert flag.status == QCStatus.FAIL
+    assert "рассчитана предварительно" in flag.message
+
+
 def test_impact_s_without_documented_joint_result_warns(full_dossier, sample_output):
     sample_output.selections.accountability.impact = ImpactType.S
     full_dossier.kpis = ["Исполнение бюджета ТОиР"]

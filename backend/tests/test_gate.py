@@ -27,3 +27,13 @@ def test_missing_recommended_needs_clarification(full_dossier):
     assert result.status == EvaluationStatus.NEEDS_CLARIFICATION
     assert result.can_evaluate
     assert "Якорные должности" in result.warnings
+
+
+def test_role_core_with_missing_authorities_is_estimated(full_dossier):
+    full_dossier.authorities.decides_alone = []
+    full_dossier.authorities.requires_approval = []
+    full_dossier.authorities.recommends = []
+    result = evaluate_gate(full_dossier)
+    assert result.status == EvaluationStatus.NEEDS_CLARIFICATION
+    assert result.can_evaluate
+    assert "Полномочия (сам/согласует/рекомендует)" in result.missing_fields
