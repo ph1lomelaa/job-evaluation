@@ -231,15 +231,13 @@ function FactorDiffCard({
             )}
           >
             <div className="text-[rgb(var(--fg)/0.82)]">{row.name}</div>
-            <span className="num min-w-10 rounded-lg border border-[#d9d4cd] bg-[#f8f6f2] px-2.5 py-1 text-center font-semibold dark:border-white/10 dark:bg-white/5">
+            <span className="num min-w-10 text-center text-lg font-bold text-accent">
               {row.level}
             </span>
             <span
               className={cn(
-                "num min-w-10 rounded-lg border px-2.5 py-1 text-center font-semibold",
-                differs
-                  ? "border-warn/40 bg-warn/15 text-warn"
-                  : "border-[#d9d4cd] bg-[#f8f6f2] dark:border-white/10 dark:bg-white/5",
+                "num min-w-10 text-center text-lg font-bold",
+                differs ? "text-warn" : "text-accent",
               )}
             >
               {rightRow?.level ?? "—"}

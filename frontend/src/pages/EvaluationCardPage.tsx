@@ -807,7 +807,7 @@ function FactorGroupBlock({
               </details>
             )}
           </div>
-          <span className="num mt-0.5 min-w-10 rounded-lg border border-[#d9d4cd] bg-[#f8f6f2] px-2.5 py-1 text-center text-sm font-semibold dark:border-white/10 dark:bg-white/5">
+          <span className="num mt-0.5 min-w-10 text-center text-xl font-bold leading-none text-accent">
             {r.level}
           </span>
         </div>
