@@ -12,7 +12,7 @@
   --glass-bg: 255 255 255;
   --glass-bg-alpha: 1;
   --glass-border: 224 220 215 / 1;
-  --glass-border-hover: 124 77 186 / 0.42;
+  --glass-border-hover: 140 45 63 / 0.42;
   --glass-shadow: 18 38 63 / 0.06;
   --field-bg: 255 255 255 / 1;
   --field-border: 218 214 209 / 1;
@@ -75,8 +75,8 @@
     color: rgb(var(--muted) / 0.6);
   }
   .field:focus {
-    border-color: #7c4dba;
-    box-shadow: 0 0 0 3px rgb(124 77 186 / 0.12);
+    border-color: #8c2d3f;
+    box-shadow: 0 0 0 3px rgb(140 45 63 / 0.12);
   }
   select.field {
     appearance: none;
@@ -125,9 +125,9 @@
 }
 
 .auth-field:focus {
-  border-color: #7c4dba;
+  border-color: #8c2d3f;
   background: #fff;
-  box-shadow: 0 0 0 3px rgb(124 77 186 / 0.1);
+  box-shadow: 0 0 0 3px rgb(140 45 63 / 0.1);
 }
 
 .app-canvas {

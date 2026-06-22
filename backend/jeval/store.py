@@ -340,9 +340,6 @@ class SqliteStore:
                     name TEXT NOT NULL,
                     slug TEXT NOT NULL UNIQUE,
                     created_by_user_id TEXT NOT NULL REFERENCES users(id),
-                    onboarding_purpose TEXT,
-                    onboarding_role TEXT,
-                    organization_size TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -683,10 +680,9 @@ class SqliteStore:
             try:
                 conn.execute(
                     """INSERT INTO companies
-                       (id,name,slug,created_by_user_id,onboarding_purpose,onboarding_role,organization_size,created_at,updated_at)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                       (id,name,slug,created_by_user_id,created_at,updated_at)
+                       VALUES (?,?,?,?,?,?)""",
                     (company.id, company.name, company.slug, company.created_by_user_id,
-                     company.onboarding_purpose, company.onboarding_role, company.organization_size,
                      company.created_at.isoformat(), company.updated_at.isoformat()),
                 )
                 conn.execute(

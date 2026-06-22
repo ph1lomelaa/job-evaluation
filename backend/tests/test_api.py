@@ -353,6 +353,54 @@ def test_import_docx_fill_default_authorities_is_opt_in(client, tmp_path, monkey
     assert any("ПРЕДПОЛОЖЕНИЕ" in note for note in with_flag["position"]["import_metadata"]["notes"])
 
 
+def test_infer_authorities_endpoint_fills_template(client, tmp_path, monkeypatch):
+    """UX: то же, что fill_default_authorities при импорте, но для досье,
+    которое уже сохранено без полномочий (импортировано без флага или
+    дозаполнено вручную позже) — кнопка на карточке оценки."""
+    from jeval import config
+
+    monkeypatch.setattr(config.get_settings(), "jeval_upload_dir", str(tmp_path))
+    data = _minimal_docx(
+        "Описание должности",
+        "Общая информация",
+        "Название должности : | Начальник цеха",
+        "Подчиняется : | Директор завода",
+        "Цель существования должности",
+        "Руководит цехом.",
+    )
+    imported = client.post(
+        "/api/import/document?use_ai=false",
+        files={"file": ("a.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    ).json()
+    pid = imported["position"]["id"]
+    assert imported["position"]["authorities"]["decides_alone"] == []
+
+    response = client.post(f"/api/positions/{pid}/infer-authorities")
+    assert response.status_code == 200
+    body = response.json()
+    assert "ПРЕДПОЛОЖЕНИЕ" in body["authorities"]["decides_alone"][0]
+    assert body["authorities"]["requires_approval"][0]["approver"] == "Директор завода"
+    assert any("ПРЕДПОЛОЖЕНИЕ" in note for note in body["import_metadata"]["notes"])
+
+    refetched = client.get(f"/api/positions/{pid}").json()
+    assert refetched["authorities"]["decides_alone"] == body["authorities"]["decides_alone"]
+
+
+def test_infer_authorities_endpoint_rejects_when_no_manager(client, full_dossier):
+    body = full_dossier.model_dump(mode="json", exclude_none=True)
+    body.pop("id", None)
+    body["reporting"]["manager"] = None
+    body["authorities"] = {"decides_alone": [], "requires_approval": [], "recommends": []}
+    pid = client.post("/api/positions", json=body).json()["id"]
+
+    response = client.post(f"/api/positions/{pid}/infer-authorities")
+    assert response.status_code == 400
+
+
+def test_infer_authorities_endpoint_unknown_position_404(client):
+    assert client.post("/api/positions/does-not-exist/infer-authorities").status_code == 404
+
+
 def test_list_evaluations_filtered_by_position(client, full_dossier):
     body = full_dossier.model_dump(mode="json", exclude_none=True)
     body.pop("id", None)

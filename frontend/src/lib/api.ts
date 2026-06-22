@@ -102,12 +102,8 @@ export const api = {
   me: () => request<MeResponse>("/api/auth/me"),
   logout: () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   listCompanies: () => request<Company[]>("/api/companies"),
-  createCompany: (body: {
-    name: string;
-    purpose?: string;
-    user_role?: string;
-    organization_size?: string;
-  }) => request<Company>("/api/companies", { method: "POST", body: JSON.stringify(body) }),
+  createCompany: (body: { name: string }) =>
+    request<Company>("/api/companies", { method: "POST", body: JSON.stringify(body) }),
   activateCompany: (id: string) =>
     request<Company>(`/api/companies/${id}/activate`, { method: "POST" }),
   listGradeBands: () => request<GradeBand[]>("/api/reference/grades"),
@@ -125,6 +121,8 @@ export const api = {
   updatePosition: (id: string, body: JobDossier) =>
     request<JobDossier>(`/api/positions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   gateCheck: (id: string) => request<GateResult>(`/api/positions/${id}/gate`, { method: "POST" }),
+  inferAuthorities: (id: string) =>
+    request<JobDossier>(`/api/positions/${id}/infer-authorities`, { method: "POST" }),
   uploadDocument: (positionId: string, file: File) => {
     const form = new FormData();
     form.append("file", file);

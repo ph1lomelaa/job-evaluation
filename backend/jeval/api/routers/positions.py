@@ -87,6 +87,36 @@ def update_position(
     return result
 
 
+@router.post("/{position_id}/infer-authorities", response_model=JobDossier)
+def infer_authorities(
+    position_id: str,
+    ctx: WorkspaceContext = Depends(write_workspace_context),
+    store: Store = Depends(get_store),
+) -> JobDossier:
+    """Применить шаблон 'Полномочия' по умолчанию к уже сохранённому досье —
+    та же логика, что и опт-ин fill_default_authorities при импорте (см.
+    import_document), но для досье, которое уже сохранено без полномочий
+    (например, дозаполнено вручную позже или импортировано без флага)."""
+    pos = store.get_position(position_id, ctx.company_id)
+    if not pos:
+        raise HTTPException(404, "Должность не найдена")
+    inferred = infer_default_authorities(pos)
+    if inferred is None:
+        raise HTTPException(
+            400,
+            "Нельзя применить шаблон: либо полномочия уже заполнены, либо не "
+            "указан руководитель (Подчиняется) — без него нет с кем сравнивать.",
+        )
+    pos.authorities = inferred
+    note = default_authorities_note(pos.reporting.manager or "")
+    if pos.import_metadata:
+        pos.import_metadata.notes.append(note)
+    pos.updated_at = now()
+    result = store.save_position(pos, ctx.company_id)
+    store.record_audit(ctx.company_id, ctx.user_id, "position.infer_authorities", "position", position_id)
+    return result
+
+
 @router.post("/{position_id}/gate", response_model=GateResult)
 def gate_check(
     position_id: str,

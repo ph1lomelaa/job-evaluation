@@ -283,7 +283,7 @@ export default function EvaluationCardPage() {
         </Card>
       )}
 
-      <DossierPreview position={position} />
+      <DossierPreview position={position} onChanged={reload} />
 
       {evaluation && (
         <Card className="border-accent/20 p-5">
@@ -357,7 +357,29 @@ export default function EvaluationCardPage() {
     </div>
   );
 }
-function DossierPreview({ position }: { position: JobDossier }) {
+function DossierPreview({ position, onChanged }: { position: JobDossier; onChanged: () => void }) {
+  const [inferring, setInferring] = useState(false);
+  const [inferError, setInferError] = useState<string | null>(null);
+
+  async function applyDefaultAuthorities() {
+    setInferring(true);
+    setInferError(null);
+    try {
+      await api.inferAuthorities(position.id ?? "");
+      onChanged();
+    } catch (e) {
+      setInferError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setInferring(false);
+    }
+  }
+
+  const authoritiesEmpty =
+    position.authorities.decides_alone.length === 0 &&
+    position.authorities.requires_approval.length === 0 &&
+    position.authorities.recommends.length === 0;
+  const canInferAuthorities = authoritiesEmpty && Boolean(position.reporting.manager);
+
   const sections = [
     { title: "Цель должности", items: position.purpose ? [position.purpose] : [] },
     { title: "Ключевые результаты", items: position.key_results },
@@ -428,6 +450,21 @@ function DossierPreview({ position }: { position: JobDossier }) {
               </ul>
             ) : (
               <p className="text-sm text-muted">Не заполнено</p>
+            )}
+            {section.title === "Полномочия" && canInferAuthorities && (
+              <div className="mt-3 border-t border-[rgb(var(--row-divider))] pt-3">
+                <Button variant="secondary" disabled={inferring} onClick={applyDefaultAuthorities}>
+                  {inferring ? "Заполняем…" : "Заполнить шаблоном по умолчанию"}
+                </Button>
+                <p className="mt-2 text-xs text-muted">
+                  Документ не описывает полномочия явно. Шаблон — предположение по
+                  организационной иерархии (решает в своей зоне, согласует с
+                  руководителем), помечается явно и заваливает QC до подтверждения
+                  человеком. Надёжнее — заполнить настоящими фактами через
+                  «Редактировать».
+                </p>
+                {inferError && <p className="mt-2 text-xs text-accent">{inferError}</p>}
+              </div>
             )}
           </div>
         ))}

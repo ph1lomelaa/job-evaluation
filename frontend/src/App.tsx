@@ -31,11 +31,7 @@ function PrivateApplication() {
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="auth-shell grid min-h-screen place-items-center">
-        <div className="grid h-12 w-12 animate-pulse place-items-center rounded-2xl bg-accent font-semibold text-white">H</div>
-      </div>
-    );
+    return <div className="auth-shell min-h-screen" />;
   }
   if (!user) return <AuthPage />;
   if (companies.length === 0) return <OnboardingPage />;

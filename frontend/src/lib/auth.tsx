@@ -12,9 +12,6 @@ import type { Company, User } from "./types";
 
 interface CompanyDraft {
   name: string;
-  purpose?: string;
-  user_role?: string;
-  organization_size?: string;
 }
 
 interface AuthState {

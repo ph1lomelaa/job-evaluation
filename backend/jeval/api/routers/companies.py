@@ -42,9 +42,6 @@ def create_company(
         name=payload.name,
         slug=f"{_slug(payload.name)}-{company_id[:8]}",
         created_by_user_id=user.id,
-        onboarding_purpose=payload.purpose,
-        onboarding_role=payload.user_role,
-        organization_size=payload.organization_size,
         created_at=moment,
         updated_at=moment,
     )

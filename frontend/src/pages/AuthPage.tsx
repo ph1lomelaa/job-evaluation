@@ -54,14 +54,11 @@ export default function AuthPage() {
     <main className="auth-shell min-h-screen lg:grid lg:grid-cols-[minmax(0,1.08fr)_minmax(480px,0.92fr)]">
       <section className="auth-hero relative flex min-h-[46vh] flex-col overflow-hidden border-b border-[#e3dfd8] px-6 py-7 sm:px-10 lg:min-h-screen lg:border-b-0 lg:border-r lg:px-[clamp(40px,5vw,84px)] lg:py-10">
         <div className="flex items-center gap-3 text-[15px] font-semibold tracking-[-0.2px] text-[#282522]">
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-[#7c4dba] text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,77,186,0.22)]" aria-hidden="true">
-            JE
-          </span>
           <span>Оценка должностей</span>
         </div>
 
         <div className="relative z-10 my-auto max-w-[760px] py-14 lg:py-20">
-          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#7c4dba]">
+          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#8c2d3f]">
             Система грейдирования
           </p>
           <h1 className="font-display text-[48px] font-medium leading-[0.91] tracking-[-2.2px] text-[#211f1d] sm:text-[68px] lg:text-[clamp(58px,5.2vw,88px)]">
@@ -76,25 +73,24 @@ export default function AuthPage() {
           <div className="auth-preview mt-10 max-w-[590px] rounded-[22px] border border-[#ded9d2] bg-white/90 p-5 sm:p-6">
             <div className="flex items-center justify-between border-b border-[#ebe7e1] pb-4 text-xs font-semibold">
               <span>Карточка оценки</span>
-              <span className="rounded-full bg-[#eee8f7] px-3 py-1 text-[#6f42ad]">готово к комитету</span>
+              <span className="rounded-full bg-[#f7e8ea] px-3 py-1 text-[#7a2636]">готово к комитету</span>
             </div>
             <div className="grid grid-cols-3 gap-3 pt-5">
               {[["Знания", "350"], ["Решение задач", "152"], ["Ответственность", "200"]].map(([label, score]) => (
                 <div key={label}>
                   <div className="text-xs leading-4 text-[#8a857e]">{label}</div>
-                  <div className="mt-1 font-display text-3xl font-medium text-[#282522]">{score}</div>
+                  <div className="mt-1 font-sans text-3xl font-medium text-[#282522]">{score}</div>
                 </div>
               ))}
             </div>
-            <div className="mt-5 flex items-end justify-between rounded-2xl bg-[#f5f1f9] px-4 py-3">
+            <div className="mt-5 flex items-end justify-between rounded-2xl bg-[#faf0f1] px-4 py-3">
               <span className="text-xs leading-5 text-[#736d79]">Итоговая оценка<br />и согласованный грейд</span>
-              <span className="font-display text-4xl font-medium text-[#6f42ad]">702 · G14</span>
+              <span className="font-sans text-4xl font-medium text-[#7a2636]">702 · G14</span>
             </div>
           </div>
         </div>
 
         <p className="relative z-10 hidden text-xs text-[#96918a] lg:block">Методология оценки должностей · защищённый доступ</p>
-        <div className="pointer-events-none absolute -bottom-28 -right-24 h-80 w-80 rounded-full border-[55px] border-[#7c4dba]/[0.06]" />
       </section>
 
       <section className="flex min-h-[54vh] items-center bg-white px-6 py-14 sm:px-10 lg:min-h-screen lg:px-[clamp(52px,7vw,118px)]">
@@ -143,7 +139,7 @@ export default function AuthPage() {
           {registrationEnabled && (
             <p className="mt-7 text-center text-sm text-[#77736e]">
               {isRegistration ? "Уже есть аккаунт?" : "Нет аккаунта?"}{" "}
-              <button type="button" onClick={switchMode} className="font-medium text-[#7c4dba] hover:text-[#603694]">
+              <button type="button" onClick={switchMode} className="font-medium text-[#8c2d3f] hover:text-[#5c1822]">
                 {isRegistration ? "Войти" : "Регистрация"}
               </button>
             </p>

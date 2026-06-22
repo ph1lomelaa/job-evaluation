@@ -51,9 +51,6 @@ class Company(BaseModel):
     name: str
     slug: str
     created_by_user_id: str
-    onboarding_purpose: Optional[str] = None
-    onboarding_role: Optional[str] = None
-    organization_size: Optional[str] = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -155,9 +152,6 @@ class LoginRequest(BaseModel):
 
 class CompanyCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=160)
-    purpose: Optional[str] = Field(default=None, max_length=80)
-    user_role: Optional[str] = Field(default=None, max_length=80)
-    organization_size: Optional[str] = Field(default=None, max_length=80)
 
     @field_validator("name")
     @classmethod
