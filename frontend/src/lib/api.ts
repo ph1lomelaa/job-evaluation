@@ -19,7 +19,7 @@ import type {
   PublicJobForm,
 } from "./types";
 
-const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+const BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://127.0.0.1:8000" : window.location.origin);
 export const API_BASE_URL = BASE;
 
 export const ACTIVE_COMPANY_KEY = "jeval.auth.company.v1";

@@ -51,6 +51,28 @@ def test_pay_argument_detected(full_dossier, sample_output):
     assert _flag(flags, "pay_independence").status == QCStatus.FAIL
 
 
+def test_authorities_assumed_template_fails(full_dossier, sample_output):
+    """UX: шаблон полномочий по умолчанию (jeval/importer/authorities.py) не
+    может пройти как подтверждённый факт — должен форсировать needs_clarification."""
+    from jeval.qc import AUTHORITY_ASSUMPTION_MARKER
+
+    full_dossier.authorities.decides_alone = [f"{AUTHORITY_ASSUMPTION_MARKER} тестовый текст"]
+    full_dossier.authorities.requires_approval = []
+    full_dossier.authorities.recommends = []
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    flag = _flag(flags, "authorities_assumed")
+    assert flag.status == QCStatus.FAIL
+    assert flag.factor_groups == ["accountability"]
+
+
+def test_authorities_from_document_passes(full_dossier, sample_output):
+    """full_dossier фикстуры — реальные (не шаблонные) полномочия → PASS."""
+    score = compute_score(sample_output.selections)
+    flags = run_qc(full_dossier, sample_output.selections, score)
+    assert _flag(flags, "authorities_assumed").status == QCStatus.PASS
+
+
 def test_impact_s_without_documented_joint_result_warns(full_dossier, sample_output):
     sample_output.selections.accountability.impact = ImpactType.S
     full_dossier.kpis = ["Исполнение бюджета ТОиР"]

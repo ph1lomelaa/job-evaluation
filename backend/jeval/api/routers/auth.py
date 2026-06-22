@@ -102,6 +102,8 @@ def register(
     store: Store = Depends(get_store),
     _rate: None = Depends(limit_register),
 ) -> AuthResponse:
+    if not get_settings().jeval_registration_enabled:
+        raise HTTPException(403, "Самостоятельная регистрация отключена")
     email = normalize_email(payload.email)
     if store.get_user_by_email(email):
         raise HTTPException(409, "Аккаунт с таким email уже существует")

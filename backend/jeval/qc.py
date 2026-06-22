@@ -48,6 +48,16 @@ _SUPPORT_FUNCTION_MARKERS = (
     "документооборот", "pr", "связи с общественностью", "корпоративное управление",
 )
 
+# Маркер шаблона "Полномочия" по умолчанию (jeval/importer/authorities.py) —
+# когда документ не описывает decides_alone/requires_approval/recommends явно,
+# но это требуется для Gate 0. Шаблон НЕ факт из документа — отдельная QC
+# проверка ниже обязана найти этот маркер и завернуть оценку на уточнение,
+# а не дать ей пройти как подтверждённой.
+AUTHORITY_ASSUMPTION_MARKER = (
+    "[ПРЕДПОЛОЖЕНИЕ — не из документа, основано на организационной иерархии; "
+    "подтвердите перед оценкой]"
+)
+
 
 def _dossier_text(d: JobDossier) -> str:
     parts: list[str] = [d.purpose or "", d.organizational_context or ""]
@@ -178,6 +188,29 @@ def run_qc(
                 f"Аргументы про оплату/грейд: {', '.join(pay)}" if pay
                 else "Нет аргументов про оплату",
                 "Убрать ссылки на зарплату, рынок и текущий грейд из обоснования.",
+            )
+        )
+
+        # Полномочия — шаблон по умолчанию, а не факт из документа (см.
+        # AUTHORITY_ASSUMPTION_MARKER / jeval/importer/authorities.py). Решение
+        # на основе допущения не может пройти как подтверждённое — FAIL форсирует
+        # needs_clarification, пока человек не подтвердит/заменит реальными фактами.
+        authority_texts = (
+            dossier.authorities.decides_alone
+            + [item.item for item in dossier.authorities.requires_approval]
+            + dossier.authorities.recommends
+        )
+        assumed_authority = any(AUTHORITY_ASSUMPTION_MARKER in t for t in authority_texts)
+        flags.append(
+            _flag(
+                "authorities_assumed", QCSeverity.HIGH,
+                QCStatus.FAIL if assumed_authority else QCStatus.PASS,
+                "Полномочия заполнены шаблоном по умолчанию (организационная иерархия), "
+                "не описаны в документе явно" if assumed_authority
+                else "Полномочия не помечены как предположение",
+                "Подтвердить реальные полномочия (что решает сам / согласует / "
+                "рекомендует) и заменить шаблонный текст фактами из документа или от HR.",
+                factors=("accountability",),
             )
         )
 

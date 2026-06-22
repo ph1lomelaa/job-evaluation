@@ -16,6 +16,7 @@ from ...domain.models import DossierImportResult, GateResult, JobDossier
 from ...gate import evaluate_gate
 from ...importer import build_dossier_from_text, extract_docx_text
 from ...importer.agent import DossierExtractionAgent
+from ...importer.authorities import default_authorities_note, infer_default_authorities
 from ...store import Store
 from ..deps import WorkspaceContext, get_store, now, workspace_context, write_workspace_context
 
@@ -133,6 +134,7 @@ import_router = APIRouter(prefix="/api/import", tags=["import"])
 async def import_document(
     file: UploadFile,
     use_ai: Optional[bool] = None,
+    fill_default_authorities: bool = False,
     ctx: WorkspaceContext = Depends(write_workspace_context),
     store: Store = Depends(get_store),
 ) -> DossierImportResult:
@@ -173,6 +175,17 @@ async def import_document(
             source_sha256=digest,
             source_blocks=parsed.blocks,
         )
+    if fill_default_authorities:
+        # Явный опт-ин (не по умолчанию): шаблон полномочий по организационной
+        # иерархии, помечен AUTHORITY_ASSUMPTION_MARKER — qc.py::authorities_assumed
+        # завернёт оценку на уточнение, пока человек не подтвердит/заменит фактами.
+        inferred = infer_default_authorities(result.position)
+        if inferred is not None:
+            result.position.authorities = inferred
+            note = default_authorities_note(result.position.reporting.manager or "")
+            result.notes.append(note)
+            result.position.import_metadata.notes.append(note)
+
     result.position.id = result.position.id or str(uuid.uuid4())
     result.position.company_id = ctx.company_id
     result.position.created_by_user_id = ctx.user_id

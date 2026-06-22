@@ -21,6 +21,10 @@ from ..domain.models import (
 )
 from .docx import ParsedBlock
 
+# См. agent.py::_RAW_TEXT_PREVIEW_LIMIT — тот же лимит, чтобы оба пути импорта
+# (ИИ и эвристика) не обрезали документ до критичных для Know-How разделов.
+_RAW_TEXT_PREVIEW_LIMIT = 12000
+
 
 _SECTION_TITLES = (
     "Общая информация",
@@ -166,7 +170,7 @@ def build_dossier_from_text(
             notes=notes,
             missing_fields=missing,
             field_sources=field_sources,
-            raw_text_preview=normalized[:2000],
+            raw_text_preview=normalized[:_RAW_TEXT_PREVIEW_LIMIT],
         ),
     )
 

@@ -321,6 +321,38 @@ def test_import_docx_creates_draft_position(client, tmp_path, monkeypatch):
     assert (tmp_path / position["id"] / "sample.docx").exists()
 
 
+def test_import_docx_fill_default_authorities_is_opt_in(client, tmp_path, monkeypatch):
+    from jeval import config
+
+    monkeypatch.setattr(config.get_settings(), "jeval_upload_dir", str(tmp_path))
+    data = _minimal_docx(
+        "Описание должности",
+        "Общая информация",
+        "Название должности : | Начальник цеха",
+        "Подчиняется : | Директор завода",
+        "Цель существования должности",
+        "Руководит цехом.",
+    )
+
+    # Без флага — полномочия не трогаются, остаются пустыми.
+    without_flag = client.post(
+        "/api/import/document?use_ai=false",
+        files={"file": ("a.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    ).json()
+    assert without_flag["position"]["authorities"]["decides_alone"] == []
+
+    # С флагом — шаблон по умолчанию, явно помеченный как предположение.
+    with_flag = client.post(
+        "/api/import/document?use_ai=false&fill_default_authorities=true",
+        files={"file": ("b.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    ).json()
+    decides_alone = with_flag["position"]["authorities"]["decides_alone"]
+    assert decides_alone and "ПРЕДПОЛОЖЕНИЕ" in decides_alone[0]
+    assert with_flag["position"]["authorities"]["requires_approval"][0]["approver"] == "Директор завода"
+    assert any("ПРЕДПОЛОЖЕНИЕ" in note for note in with_flag["notes"])
+    assert any("ПРЕДПОЛОЖЕНИЕ" in note for note in with_flag["position"]["import_metadata"]["notes"])
+
+
 def test_list_evaluations_filtered_by_position(client, full_dossier):
     body = full_dossier.model_dump(mode="json", exclude_none=True)
     body.pop("id", None)

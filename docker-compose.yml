@@ -1,6 +1,9 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - internal
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-jeval}
       POSTGRES_USER: ${POSTGRES_USER:-jeval}
@@ -14,21 +17,31 @@ services:
       retries: 10
 
   backend:
+    container_name: jeval_backend
     build:
       context: ./backend
+    restart: unless-stopped
     env_file:
-      - ./.env
+      - ${ENV_FILE:-./.env}
     environment:
       JEVAL_HOST: 0.0.0.0
       JEVAL_PORT: 8000
+      JEVAL_ENV: production
+      JEVAL_AUTH_REQUIRED: "true"
+      JEVAL_REGISTRATION_ENABLED: "true"
+      JEVAL_DISABLE_ACCESS_GATE: "false"
       JEVAL_DB_URL: postgresql+psycopg://${POSTGRES_USER:-jeval}:${POSTGRES_PASSWORD:-jeval}@db:5432/${POSTGRES_DB:-jeval}
-      JEVAL_FRONTEND_URL: ${FRONTEND_PUBLIC_URL:-http://127.0.0.1:5173}
-      JEVAL_GOOGLE_REDIRECT_URI: ${BACKEND_PUBLIC_URL:-http://127.0.0.1:8001}/api/auth/google/callback
-    ports:
-      - "8001:8000"
+      JEVAL_FRONTEND_URL: https://${DOMAIN}
+      JEVAL_GOOGLE_REDIRECT_URI: https://${DOMAIN}/api/auth/google/callback
+      JEVAL_CORS_ORIGIN_REGEX: ^https://${DOMAIN_REGEX}$$
+    volumes:
+      - backend_uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - internal
+      - caddy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()\""]
       interval: 10s
@@ -37,15 +50,26 @@ services:
       start_period: 10s
 
   frontend:
+    container_name: jeval_frontend
     build:
       context: ./frontend
       args:
-        VITE_API_URL: ${BACKEND_PUBLIC_URL:-http://127.0.0.1:8001}
-    ports:
-      - "5173:80"
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_REGISTRATION_ENABLED: "true"
+    restart: unless-stopped
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      - caddy
+
+networks:
+  internal:
+    internal: true
+  caddy:
+    external: true
+    name: ${CADDY_NETWORK:-caddy}
 
 volumes:
   postgres_data:
+  backend_uploads:

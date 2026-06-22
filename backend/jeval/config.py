@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # Авторизация. В production включена по умолчанию; тестовая фабрика может
     # явно отключить её для старых isolated unit-тестов.
     jeval_auth_required: bool = True
+    jeval_registration_enabled: bool = True
     jeval_session_days: int = 30
     jeval_frontend_url: str = "http://127.0.0.1:5173"
 

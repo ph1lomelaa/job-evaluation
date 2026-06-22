@@ -24,6 +24,10 @@ from ..domain.models import (
 )
 from .docx import ParsedBlock
 
+# Хватает на большинство реальных ОД/ДИ целиком (раньше было 2000 — резало
+# документы до раздела "Навыки, знания и опыт", критичного для Know-How).
+_RAW_TEXT_PREVIEW_LIMIT = 12000
+
 
 class DossierDraftOutput(BaseModel):
     name: str = "Импортированная должность"
