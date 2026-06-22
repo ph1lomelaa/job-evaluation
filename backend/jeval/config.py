@@ -18,7 +18,11 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
 
-    # Выбор провайдера: "anthropic" | "groq" | "fake"
+    # OpenAI (альтернатива Anthropic/Groq)
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+
+    # Выбор провайдера: "anthropic" | "groq" | "openai" | "fake"
     # "fake" — офлайн-заглушка без API-ключа
     jeval_agent_provider: str = "anthropic"
 

@@ -88,18 +88,30 @@ def _has_marker(text: str, markers: tuple[str, ...]) -> bool:
 
 
 def run_qc(
-    dossier: JobDossier,
+    dossier: JobDossier | None,
     selections: FactorSelections,
     score: ScoreResult,
     agent_text: str = "",
 ) -> list[QCFlag]:
     """QC-проверки (раздел 9). `agent_text` — резюме/обоснование агента для
-    проверки запрещённых эпитетов и маркеров персонализации/оплаты."""
+    проверки запрещённых эпитетов и маркеров персонализации/оплаты.
+
+    ``dossier`` опционален: без него правила, читающие текст/масштаб/KPI
+    досье (раздел 9.2/9.3/9.4 про персонализацию, оплату, impact P/S, типовые
+    кейсы, Magnitude и поддерживающие функции), пропускаются целиком, а не
+    молча проходят как PASS без реальной проверки — это используется
+    отдельным от полной оценки калькулятором (`/api/reference/calculate`),
+    где никакого досье ещё нет, только уровни факторов.
+    """
     kh = selections.know_how
     ps = selections.problem_solving
     acc = selections.accountability
     flags: list[QCFlag] = []
-    text = _dossier_text(dossier) + " " + _selection_text(selections) + " " + agent_text.lower()
+    text = (
+        _dossier_text(dossier) + " " + _selection_text(selections) + " " + agent_text.lower()
+        if dossier is not None
+        else ""
+    )
 
     # Пограничный модификатор не является способом выразить неуверенность.
     # Для каждого +/- нужны соседний уровень и проверяемое объяснение границы.
@@ -143,83 +155,84 @@ def run_qc(
         )
     )
 
-    # 9.2 Должность, а не человек
-    hits = _find_markers(text, _PERSON_MARKERS)
-    flags.append(
-        _flag(
-            "person_not_role", QCSeverity.HIGH,
-            QCStatus.FAIL if hits else QCStatus.PASS,
-            f"Признаки оценки работника, а не должности: {', '.join(hits)}" if hits
-            else "Оценивается роль, не работник",
-            "Исключить аргументы про конкретного работника или подтвердить, что это "
-            "постоянное требование должности.",
-        )
-    )
-
-    # 9.3 Независимость от оплаты
-    pay = _find_markers(text, _PAY_MARKERS)
-    flags.append(
-        _flag(
-            "pay_independence", QCSeverity.HIGH,
-            QCStatus.FAIL if pay else QCStatus.PASS,
-            f"Аргументы про оплату/грейд: {', '.join(pay)}" if pay
-            else "Нет аргументов про оплату",
-            "Убрать ссылки на зарплату, рынок и текущий грейд из обоснования.",
-        )
-    )
-
-    # 9.4 Impact P без KPI и ресурсов → FAIL
-    has_resource = _scope_has_resource(dossier)
-    if acc.impact == ImpactType.P:
-        ok = bool(dossier.kpis) and has_resource
+    if dossier is not None:
+        # 9.2 Должность, а не человек
+        hits = _find_markers(text, _PERSON_MARKERS)
         flags.append(
             _flag(
-                "impact_p_requires_kpi_resource", QCSeverity.HIGH,
-                QCStatus.PASS if ok else QCStatus.FAIL,
-                "Тип влияния P подтверждён KPI и ресурсным рычагом" if ok
-                else "Тип влияния P без KPI результата и/или ресурсного рычага",
-                "Для P нужны KPI результата и управление ресурсами (люди/бюджет/лимиты). "
-                "Иначе понизить до S или C.",
-                factors=("accountability",),
+                "person_not_role", QCSeverity.HIGH,
+                QCStatus.FAIL if hits else QCStatus.PASS,
+                f"Признаки оценки работника, а не должности: {', '.join(hits)}" if hits
+                else "Оценивается роль, не работник",
+                "Исключить аргументы про конкретного работника или подтвердить, что это "
+                "постоянное требование должности.",
             )
         )
 
-    # Shared impact требует документированного совместного результата. Сам факт
-    # наличия руководителя не запрещает S: матричные и проектные роли могут иметь
-    # совместное влияние при явно разделённой ответственности.
-    if acc.impact == ImpactType.S:
-        shared_text = " ".join(dossier.kpis + dossier.key_results + acc.evidence).lower()
-        has_joint_result = _has_marker(
-            shared_text,
-            ("совмест", "разделенн", "совлад", "joint", "общий kpi", "общего результата"),
-        )
+        # 9.3 Независимость от оплаты
+        pay = _find_markers(text, _PAY_MARKERS)
         flags.append(
             _flag(
-                "impact_s_requires_joint_kpi", QCSeverity.MEDIUM,
-                QCStatus.PASS if has_joint_result else QCStatus.WARN,
-                "Тип влияния S подтверждён совместным результатом"
-                if has_joint_result
-                else "Тип влияния S не подтверждён совместным результатом или разделённой ответственностью",
-                "Указать общий конечный результат, других совладельцев и границы ответственности; "
-                "иначе пересмотреть тип влияния C или P.",
-                factors=("accountability",),
+                "pay_independence", QCSeverity.HIGH,
+                QCStatus.FAIL if pay else QCStatus.PASS,
+                f"Аргументы про оплату/грейд: {', '.join(pay)}" if pay
+                else "Нет аргументов про оплату",
+                "Убрать ссылки на зарплату, рынок и текущий грейд из обоснования.",
             )
         )
 
-    # 9.4 Коммуникации 3 без кейсов влияния/сопротивления
-    if kh.communication == Communication.THREE:
-        has_cases = _has_marker(text, _INFLUENCE_MARKERS)
-        flags.append(
-            _flag(
-                "comm3_needs_resistance", QCSeverity.MEDIUM,
-                QCStatus.PASS if has_cases else QCStatus.WARN,
-                "Коммуникации 3 подтверждены кейсами переговоров/сопротивления" if has_cases
-                else "Коммуникации 3 без кейсов сопротивления/переговоров — вероятное завышение",
-                "Подтвердить изменение позиции/поведения, устойчивое сопротивление или "
-                "конфликт интересов. Иначе понизить до 2.",
-                factors=("know_how",),
+        # 9.4 Impact P без KPI и ресурсов → FAIL
+        has_resource = _scope_has_resource(dossier)
+        if acc.impact == ImpactType.P:
+            ok = bool(dossier.kpis) and has_resource
+            flags.append(
+                _flag(
+                    "impact_p_requires_kpi_resource", QCSeverity.HIGH,
+                    QCStatus.PASS if ok else QCStatus.FAIL,
+                    "Тип влияния P подтверждён KPI и ресурсным рычагом" if ok
+                    else "Тип влияния P без KPI результата и/или ресурсного рычага",
+                    "Для P нужны KPI результата и управление ресурсами (люди/бюджет/лимиты). "
+                    "Иначе понизить до S или C.",
+                    factors=("accountability",),
+                )
             )
-        )
+
+        # Shared impact требует документированного совместного результата. Сам факт
+        # наличия руководителя не запрещает S: матричные и проектные роли могут иметь
+        # совместное влияние при явно разделённой ответственности.
+        if acc.impact == ImpactType.S:
+            shared_text = " ".join(dossier.kpis + dossier.key_results + acc.evidence).lower()
+            has_joint_result = _has_marker(
+                shared_text,
+                ("совмест", "разделенн", "совлад", "joint", "общий kpi", "общего результата"),
+            )
+            flags.append(
+                _flag(
+                    "impact_s_requires_joint_kpi", QCSeverity.MEDIUM,
+                    QCStatus.PASS if has_joint_result else QCStatus.WARN,
+                    "Тип влияния S подтверждён совместным результатом"
+                    if has_joint_result
+                    else "Тип влияния S не подтверждён совместным результатом или разделённой ответственностью",
+                    "Указать общий конечный результат, других совладельцев и границы ответственности; "
+                    "иначе пересмотреть тип влияния C или P.",
+                    factors=("accountability",),
+                )
+            )
+
+        # 9.4 Коммуникации 3 без кейсов влияния/сопротивления
+        if kh.communication == Communication.THREE:
+            has_cases = _has_marker(text, _INFLUENCE_MARKERS)
+            flags.append(
+                _flag(
+                    "comm3_needs_resistance", QCSeverity.MEDIUM,
+                    QCStatus.PASS if has_cases else QCStatus.WARN,
+                    "Коммуникации 3 подтверждены кейсами переговоров/сопротивления" if has_cases
+                    else "Коммуникации 3 без кейсов сопротивления/переговоров — вероятное завышение",
+                    "Подтвердить изменение позиции/поведения, устойчивое сопротивление или "
+                    "конфликт интересов. Иначе понизить до 2.",
+                    factors=("know_how",),
+                )
+            )
 
     # 9.4 Know-How низкий + управление широкое
     if kh.specialization in {SpecializedKnowHow.A, SpecializedKnowHow.B, SpecializedKnowHow.C} \
@@ -248,7 +261,7 @@ def run_qc(
         )
 
     # 9.4 Высокая сложность без типовых кейсов
-    if ps.complexity.value >= 4 and len(dossier.problem_cases) < 3:
+    if dossier is not None and ps.complexity.value >= 4 and len(dossier.problem_cases) < 3:
         flags.append(
             _flag(
                 "high_complexity_few_cases", QCSeverity.MEDIUM, QCStatus.WARN,
@@ -282,39 +295,40 @@ def run_qc(
             )
         )
 
-    # 7.2 / 10.7 Magnitude: количественный уровень должен опираться на годовой показатель
-    annual = _max_annual_amount(dossier)
-    if acc.magnitude != Magnitude.N:
-        has_source = bool(dossier.scope.source and dossier.scope.source.strip())
-        magnitude_ok = annual is not None and has_source
-        flags.append(
-            _flag(
-                "magnitude_annual_figure", QCSeverity.MEDIUM,
-                QCStatus.PASS if magnitude_ok else QCStatus.WARN,
-                (
-                    f"Количественная Magnitude подтверждена годовым показателем "
-                    f"({annual:,.0f} ₸; источник: {dossier.scope.source})"
-                    if magnitude_ok
-                    else f"Magnitude {acc.magnitude.value} требует годового показателя в зоне роли и источника"
-                ),
-                "Указать годовой OPEX/CAPEX/выручку/бюджет в зоне роли и источник цифры; "
-                "если деньги искажают характер влияния, обосновать неколичественную ветку N.",
-                factors=("accountability",),
+    if dossier is not None:
+        # 7.2 / 10.7 Magnitude: количественный уровень должен опираться на годовой показатель
+        annual = _max_annual_amount(dossier)
+        if acc.magnitude != Magnitude.N:
+            has_source = bool(dossier.scope.source and dossier.scope.source.strip())
+            magnitude_ok = annual is not None and has_source
+            flags.append(
+                _flag(
+                    "magnitude_annual_figure", QCSeverity.MEDIUM,
+                    QCStatus.PASS if magnitude_ok else QCStatus.WARN,
+                    (
+                        f"Количественная Magnitude подтверждена годовым показателем "
+                        f"({annual:,.0f} ₸; источник: {dossier.scope.source})"
+                        if magnitude_ok
+                        else f"Magnitude {acc.magnitude.value} требует годового показателя в зоне роли и источника"
+                    ),
+                    "Указать годовой OPEX/CAPEX/выручку/бюджет в зоне роли и источник цифры; "
+                    "если деньги искажают характер влияния, обосновать неколичественную ветку N.",
+                    factors=("accountability",),
+                )
             )
-        )
 
-    # 9.4 «Масштаб всей компании» у поддерживающей функции
-    func_text = " ".join(filter(None, (dossier.function, dossier.department, ""))).lower()
-    if acc.magnitude == Magnitude.FOUR and _has_marker(func_text, _SUPPORT_FUNCTION_MARKERS):
-        flags.append(
-            _flag(
-                "support_function_company_scale", QCSeverity.MEDIUM, QCStatus.WARN,
-                "Большая величина воздействия (4) у поддерживающей функции — требует декомпозиции",
-                "Привязать масштаб к зоне ответственности роли (бюджет функции, охват), "
-                "а не ко всей компании «по привычке».",
-                factors=("accountability",),
+        # 9.4 «Масштаб всей компании» у поддерживающей функции
+        func_text = " ".join(filter(None, (dossier.function, dossier.department, ""))).lower()
+        if acc.magnitude == Magnitude.FOUR and _has_marker(func_text, _SUPPORT_FUNCTION_MARKERS):
+            flags.append(
+                _flag(
+                    "support_function_company_scale", QCSeverity.MEDIUM, QCStatus.WARN,
+                    "Большая величина воздействия (4) у поддерживающей функции — требует декомпозиции",
+                    "Привязать масштаб к зоне ответственности роли (бюджет функции, охват), "
+                    "а не ко всей компании «по привычке».",
+                    factors=("accountability",),
+                )
             )
-        )
 
     # Шаг 2 раздела 4: запрещённые эпитеты в резюме/обосновании агента
     if agent_text:

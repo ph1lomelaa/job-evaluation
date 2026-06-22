@@ -18,7 +18,7 @@ from typing import Optional
 from fastapi import Cookie, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
-from ..agent import EvaluationAgent, FakeAgent, GroqAgent
+from ..agent import EvaluationAgent, FakeAgent, GroqAgent, OpenAIAgent
 from ..config import get_settings
 from ..domain.identity import UserRecord
 from ..orchestrator import JobEvaluator
@@ -53,14 +53,18 @@ def get_evaluator(request: Request) -> JobEvaluator:
                 raise HTTPException(
                     503,
                     "FakeAgent (тестовые данные) запрещён в production. Укажите "
-                    "ANTHROPIC_API_KEY/GROQ_API_KEY или явно подтвердите тестовый "
-                    "режим через JEVAL_ALLOW_FAKE_IN_PROD=1.",
+                    "ANTHROPIC_API_KEY/GROQ_API_KEY/OPENAI_API_KEY или явно подтвердите "
+                    "тестовый режим через JEVAL_ALLOW_FAKE_IN_PROD=1.",
                 )
             app.state.evaluator = JobEvaluator(agent=FakeAgent())
         elif provider == "groq":
             if not settings.groq_api_key:
                 raise HTTPException(503, "Агент недоступен: GROQ_API_KEY не задан.")
             app.state.evaluator = JobEvaluator(agent=GroqAgent())
+        elif provider == "openai":
+            if not settings.openai_api_key:
+                raise HTTPException(503, "Агент недоступен: OPENAI_API_KEY не задан.")
+            app.state.evaluator = JobEvaluator(agent=OpenAIAgent())
         else:
             if not settings.anthropic_api_key:
                 raise HTTPException(

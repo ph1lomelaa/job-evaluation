@@ -24,8 +24,9 @@ npm run lint                  # tsc --noEmit
 | `/compare` | Сравнение | текущая роль + якоря (селекторы), автоматический анализ различий |
 
 Все экраны работают на реальном API (`VITE_API_URL`). Для работы нужен запущенный
-бэкенд: `cd backend && uvicorn jeval.api.main:app` (без `ANTHROPIC_API_KEY` включите
-в `backend/.env` офлайн-режим `JEVAL_FAKE_AGENT=1`).
+бэкенд: `cd backend && uvicorn jeval.api.main:app` (без ключа провайдера —
+`ANTHROPIC_API_KEY`/`GROQ_API_KEY`/`OPENAI_API_KEY` — включите в `backend/.env`
+офлайн-режим `JEVAL_FAKE_AGENT=1`).
 
 ## Стек и решения
 

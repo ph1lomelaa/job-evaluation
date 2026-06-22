@@ -274,13 +274,24 @@ export interface QCFlag {
   factor_groups: string[];
 }
 
+/** Ответ POST /api/reference/calculate — баллы + QC-флаги по самим уровням
+ * (без досье, см. backend/jeval/api/routers/reference.py). */
+export interface CalculateResponse {
+  score: ScoreResult;
+  qc_flags: QCFlag[];
+}
+
 export interface Evaluation {
   id?: string | null;
   position_id?: string | null;
   company_id?: string | null;
   created_by_user_id?: string | null;
+  created_by_name?: string | null;
   status: EvaluationStatus;
   gate: GateResult;
+  /** Согласованный результат сверки параллельных оценок — не более одной
+   * на должность (см. POST /api/evaluations/{id}/finalize). */
+  is_final: boolean;
   selections?: FactorSelections | null;
   score?: ScoreResult | null;
   qc_flags: QCFlag[];

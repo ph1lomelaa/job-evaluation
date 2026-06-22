@@ -15,6 +15,7 @@ import JobFormPage from "./pages/JobFormPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PublicFormPage from "./pages/PublicFormPage";
+import ReconciliationPage from "./pages/ReconciliationPage";
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ function PrivateApplication() {
         <Route path="/admin" element={<AdminAccessPage />} />
         <Route path="/new" element={<JobFormPage />} />
         <Route path="/positions/:id/edit" element={<JobFormPage />} />
+        <Route path="/positions/:id/reconcile" element={<ReconciliationPage />} />
         <Route path="/positions/:id" element={<EvaluationCardPage />} />
         <Route path="/compare" element={<ComparisonPage />} />
         <Route path="/guide" element={<GuidePage />} />

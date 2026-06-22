@@ -3,6 +3,7 @@
 
 import type {
   AuthResponse,
+  CalculateResponse,
   Company,
   CompanyInviteSummary,
   DossierImportResult,
@@ -16,7 +17,6 @@ import type {
   MeResponse,
   PublicFormInfo,
   PublicJobForm,
-  ScoreResult,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -114,7 +114,7 @@ export const api = {
   getFactorLevels: () => request<FactorLevelReference>("/api/reference/levels"),
   getFactorLevelRules: () => request<FactorLevelRules>("/api/reference/level-rules"),
   calculateScore: (body: FactorSelections) =>
-    request<ScoreResult>("/api/reference/calculate", {
+    request<CalculateResponse>("/api/reference/calculate", {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -145,6 +145,8 @@ export const api = {
     request<Evaluation[]>(
       positionId ? `/api/evaluations?position_id=${encodeURIComponent(positionId)}` : "/api/evaluations",
     ),
+  finalizeEvaluation: (id: string) =>
+    request<Evaluation>(`/api/evaluations/${id}/finalize`, { method: "POST" }),
   listPublicForms: () => request<PublicJobForm[]>("/api/public-forms"),
   createPublicForm: (body: { title: string; recipient?: string; expires_in_days: number }) =>
     request<PublicJobForm>("/api/public-forms", { method: "POST", body: JSON.stringify(body) }),

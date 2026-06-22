@@ -306,9 +306,25 @@ class Evaluation(BaseModel):
     position_id: Optional[str] = None
     company_id: Optional[str] = None
     created_by_user_id: Optional[str] = None
+    created_by_name: Optional[str] = Field(
+        default=None,
+        description=(
+            "Имя автора версии — подставляется на выходе API из created_by_user_id "
+            "(см. api/routers/evaluations.py), не хранится отдельно в БД."
+        ),
+    )
 
     status: EvaluationStatus
     gate: GateResult
+    is_final: bool = Field(
+        default=False,
+        description=(
+            "Какая из (возможно нескольких параллельных) версий оценки этой "
+            "должности — согласованный результат для Оценочного комитета. "
+            "Не более одной финальной версии на должность одновременно — см. "
+            "POST /api/evaluations/{id}/finalize."
+        ),
+    )
 
     selections: Optional[FactorSelections] = None
     score: Optional[ScoreResult] = None

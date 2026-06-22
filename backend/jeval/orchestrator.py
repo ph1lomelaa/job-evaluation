@@ -11,7 +11,7 @@ from typing import Optional, Protocol
 
 from .agent import AgentOutput, EvaluationAgent
 from .domain.enums import Confidence, EvaluationStatus, QCStatus
-from .domain.models import Evaluation, JobDossier
+from .domain.models import Evaluation, JobDossier, QCFlag
 from .gate import evaluate_gate
 from .hierarchy import run_hierarchy_qc
 from .qc import has_blocking_failures, run_qc
@@ -21,6 +21,19 @@ from .scoring.versions import ACTIVE_TABLE_VERSION
 
 class _AgentLike(Protocol):
     def select_factors(self, dossier: JobDossier) -> AgentOutput: ...
+
+
+def decide_status(gate_status: EvaluationStatus, flags: list[QCFlag]) -> EvaluationStatus:
+    """FAIL или Gate 0 «нужны уточнения» → NEEDS_CLARIFICATION, иначе READY.
+
+    Единая точка решения — используется и полным циклом оценки
+    (``JobEvaluator.evaluate``), и точечной правкой подфактора
+    (``api/routers/evaluations.py::patch_evaluation``), чтобы оба пути не
+    могли разойтись в трактовке одних и тех же флагов.
+    """
+    if has_blocking_failures(flags) or gate_status == EvaluationStatus.NEEDS_CLARIFICATION:
+        return EvaluationStatus.NEEDS_CLARIFICATION
+    return EvaluationStatus.READY
 
 
 def _downgrade(confidence: Confidence, has_warn: bool, has_fail: bool) -> Confidence:
@@ -75,12 +88,7 @@ class JobEvaluator:
         flags += run_hierarchy_qc(dossier, out.selections, score, peers or [])
         has_fail = has_blocking_failures(flags)
         has_warn = any(f.status == QCStatus.WARN for f in flags)
-
-        if has_fail or gate.status == EvaluationStatus.NEEDS_CLARIFICATION:
-            status = EvaluationStatus.NEEDS_CLARIFICATION
-        else:
-            status = EvaluationStatus.READY
-
+        status = decide_status(gate.status, flags)
         recommendation = _committee_recommendation(status, score, flags)
 
         return Evaluation(

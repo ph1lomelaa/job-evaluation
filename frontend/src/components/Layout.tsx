@@ -6,11 +6,12 @@ import { cn } from "../lib/cn";
 import { useTheme } from "../lib/theme";
 import type { MemberRole, PublicJobForm } from "../lib/types";
 
-type IconName = "sheet" | "grades" | "calculator" | "positions" | "new" | "form" | "guide" | "admin" | "bell" | "menu";
+type IconName = "sheet" | "compare" | "grades" | "calculator" | "positions" | "new" | "form" | "guide" | "admin" | "bell" | "menu";
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   const paths: Record<IconName, ReactNode> = {
     sheet: <><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16M14 9v11"/></>,
+    compare: <><rect x="3" y="4" width="8" height="16" rx="2"/><rect x="13" y="4" width="8" height="16" rx="2"/></>,
     grades: <><path d="M5 19V9M12 19V5M19 19v-7"/><path d="M3 19h18"/></>,
     calculator: <><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8v3H8zM8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></>,
     positions: <><path d="M5 7h14v12H5z"/><path d="M9 7V5h6v2M5 12h14M10 12v2h4v-2"/></>,
@@ -26,6 +27,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 
 const NAV: Array<{ to: string; label: string; short: string; icon: IconName }> = [
   { to: "/assessment-sheet", label: "Ведомость оценки должностей", short: "Ведомость оценки", icon: "sheet" },
+  { to: "/compare", label: "Сравнение", short: "Сравнение", icon: "compare" },
   { to: "/grades", label: "Таблица грейдов", short: "Таблица грейдов", icon: "grades" },
   { to: "/calculator", label: "Калькулятор Hay Group", short: "Калькулятор", icon: "calculator" },
   { to: "/", label: "Должности", short: "Должности", icon: "positions" },

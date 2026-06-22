@@ -185,6 +185,25 @@ headcount, assets, scope_source, stakeholders, organizational_context,
 anchor_roles, problem_cases, documents, confirmed_by, extracted_fields,
 missing_fields, notes, confidence.
 
+Казахстанские ОД/ДИ часто называют нужные данные другими словами — смотри по
+смыслу раздела, а не только по точному совпадению с названием поля:
+- "Цель существования должности" / "Цель должности" → purpose.
+- "Основные области ответственности" / "должностные обязанности" / "функции" /
+  нумерованный список обязанностей → responsibilities (каждый пункт — отдельный
+  элемент списка, не один блок текста).
+- "Основные показатели эффективности работы" / "Критерии эффективности и
+  результативности" / "КПЭ" / "KPI" → kpis (каждый критерий из перечисления —
+  отдельный элемент списка, разделители внутри текста: ";", "•", нумерация).
+- "Подчиняется" → manager. "Количество непосредственных подчиненных" (число) →
+  headcount, а не subordinates.
+- "Полномочия" / "принимает решение самостоятельно" → decides_alone;
+  "согласовывает" / "утверждает другой руководитель" → requires_approval;
+  "рекомендует" / "выносит на рассмотрение" → recommends.
+- Финансовые/нефинансовые показатели масштаба (раздел "Количественные
+  показатели масштаба деятельности") — числа без явной денежной суммы (₸/тенге)
+  не записывай в annual_opex/annual_capex/annual_revenue; это не денежная
+  величина, оставь как note или headcount, если это численность.
+
 Правила:
 - missing_fields заполни названиями важных полей, которых нет в тексте.
 - extracted_fields заполни только полями, которые реально найдены.
@@ -192,6 +211,8 @@ missing_fields, notes, confidence.
 - confidence: high только если большинство ключевых блоков явно найдены, иначе medium/low.
 - subordinates — только список названий подчиненных должностей/групп. Если в документе есть только число подчиненных, запиши его в headcount, а subordinates оставь [].
 - Все поля со списками всегда возвращай как массив JSON, даже если данных нет: [].
+- Разбивай длинные перечисления (через ";", нумерацию, маркеры) на отдельные
+  элементы списка — не складывай весь раздел в один длинный элемент.
 
 Текст документа:
 {text}
@@ -221,8 +242,10 @@ class DossierExtractionAgent:
             out = self._extract_groq(text, max_tokens=max_tokens)
         elif self._provider == "anthropic":
             out = self._extract_anthropic(text, max_tokens=max_tokens)
+        elif self._provider == "openai":
+            out = self._extract_openai(text, max_tokens=max_tokens)
         else:
-            raise RuntimeError("ИИ-извлечение недоступно для provider=fake")
+            raise RuntimeError(f"ИИ-извлечение недоступно для provider={self._provider}")
         return _to_import_result(
             out,
             text,
@@ -251,6 +274,39 @@ class DossierExtractionAgent:
         )
         raw = response.choices[0].message.content or ""
         return DossierDraftOutput.model_validate(_extract_json(raw))
+
+    def _extract_openai(self, text: str, *, max_tokens: int) -> DossierDraftOutput:
+        if not self._settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY не задан")
+        from openai import OpenAI
+
+        client = OpenAI(api_key=self._settings.openai_api_key)
+        tool_name = "submit_dossier_draft"
+        response = client.chat.completions.create(
+            model=self._settings.openai_model,
+            max_completion_tokens=max_tokens,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": _USER_TEMPLATE.format(text=text[:45000])},
+            ],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "description": "Вернуть извлечённый черновик JE-досье по схеме.",
+                        "parameters": DossierDraftOutput.model_json_schema(),
+                    },
+                }
+            ],
+            tool_choice={"type": "function", "function": {"name": tool_name}},
+        )
+        message = response.choices[0].message
+        for call in message.tool_calls or []:
+            if call.function.name == tool_name:
+                return DossierDraftOutput.model_validate(json.loads(call.function.arguments))
+        raise RuntimeError("OpenAI не вернул вызов инструмента submit_dossier_draft.")
 
     def _extract_anthropic(self, text: str, *, max_tokens: int) -> DossierDraftOutput:
         if not self._settings.anthropic_api_key:

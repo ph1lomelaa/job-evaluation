@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { Button, Card, ErrorBanner } from "../components/ui";
+import { Button, Card, ErrorBanner, StatusDot } from "../components/ui";
+import { QcSection } from "../components/QcFlags";
 import { api } from "../lib/api";
-import type { Confidence, FactorSelections, ScoreResult } from "../lib/types";
+import { useFactorLevelReference } from "../lib/factorLevels";
+import type { CalculateResponse, Confidence, FactorSelections, QCFlag, ScoreResult } from "../lib/types";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const MANAGEMENT = ["T", "I", "II", "III", "IV"];
@@ -36,11 +38,17 @@ const INITIAL: CalculatorForm = {
   accModifier: "0",
 };
 
+/** "E" → "E — Зрелые профессиональные…"; без справочника (ещё не загрузился) — голый код. */
+function decodeWith(levels?: Record<string, string>) {
+  return (code: string) => (levels?.[code] ? `${code} — ${levels[code]}` : code);
+}
+
 export default function CalculatorPage() {
   const [form, setForm] = useState<CalculatorForm>(INITIAL);
-  const [score, setScore] = useState<ScoreResult | null>(null);
+  const [result, setResult] = useState<CalculateResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: levels } = useFactorLevelReference();
 
   function set<K extends keyof CalculatorForm>(key: K, value: CalculatorForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -50,7 +58,7 @@ export default function CalculatorPage() {
     setBusy(true);
     setError(null);
     try {
-      setScore(await api.calculateScore(toSelections(form)));
+      setResult(await api.calculateScore(toSelections(form)));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -71,24 +79,24 @@ export default function CalculatorPage() {
 
       <div className="grid gap-5 xl:grid-cols-3">
         <FactorCard title="Знания и умения · Know-How">
-          <Select label="Специальные знания" value={form.specialization} options={LETTERS} onChange={(v) => set("specialization", v)} />
-          <Select label="Планирование и интеграция" value={form.management} options={MANAGEMENT} onChange={(v) => set("management", v)} />
-          <Select label="Коммуникации" value={form.communication} options={NUMBERS_3} onChange={(v) => set("communication", v)} />
+          <Select label="Специальные знания" value={form.specialization} options={LETTERS} optionLabel={decodeWith(levels?.specialized_know_how)} onChange={(v) => set("specialization", v)} />
+          <Select label="Планирование и интеграция" value={form.management} options={MANAGEMENT} optionLabel={decodeWith(levels?.managerial_know_how)} onChange={(v) => set("management", v)} />
+          <Select label="Коммуникации" value={form.communication} options={NUMBERS_3} optionLabel={decodeWith(levels?.communication)} onChange={(v) => set("communication", v)} />
           <Select label="Модификатор таблицы" value={form.khModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("khModifier", v)} />
         </FactorCard>
 
         <FactorCard title="Решение вопросов · Problem Solving">
-          <Select label="Область решаемых вопросов" value={form.area} options={LETTERS} onChange={(v) => set("area", v)} />
-          <Select label="Сложность" value={form.complexity} options={COMPLEXITY} onChange={(v) => set("complexity", v)} />
+          <Select label="Область решаемых вопросов" value={form.area} options={LETTERS} optionLabel={decodeWith(levels?.problem_area)} onChange={(v) => set("area", v)} />
+          <Select label="Сложность" value={form.complexity} options={COMPLEXITY} optionLabel={decodeWith(levels?.problem_complexity)} onChange={(v) => set("complexity", v)} />
           <Select label="Модификатор таблицы" value={form.psModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("psModifier", v)} />
         </FactorCard>
 
         <FactorCard title="Ответственность · Accountability">
-          <Select label="Свобода действий" value={form.freedom} options={LETTERS} onChange={(v) => set("freedom", v)} />
+          <Select label="Свобода действий" value={form.freedom} options={LETTERS} optionLabel={decodeWith(levels?.freedom_to_act)} onChange={(v) => set("freedom", v)} />
           <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-subtle))] px-3 py-2 text-sm">
             Величина воздействия: <span className="font-semibold">N · неколичественная</span>
           </div>
-          <Select label="Уровень воздействия" value={form.nonQuantitativeImpact} options={NON_QUANTITATIVE_IMPACT} onChange={(v) => set("nonQuantitativeImpact", v)} />
+          <Select label="Уровень воздействия" value={form.nonQuantitativeImpact} options={NON_QUANTITATIVE_IMPACT} optionLabel={decodeWith(levels?.non_quantitative_impact)} onChange={(v) => set("nonQuantitativeImpact", v)} />
           <Select label="Модификатор таблицы" value={form.accModifier} options={MODIFIERS} optionLabel={modifierLabel} onChange={(v) => set("accModifier", v)} />
         </FactorCard>
       </div>
@@ -102,7 +110,7 @@ export default function CalculatorPage() {
         </p>
       </div>
 
-      {score && <Result score={score} />}
+      {result && <Result score={result.score} qcFlags={result.qc_flags} />}
     </div>
   );
 }
@@ -133,7 +141,10 @@ function Select({ label, value, options, onChange, optionLabel }: {
   );
 }
 
-function Result({ score }: { score: ScoreResult }) {
+function Result({ score, qcFlags }: { score: ScoreResult; qcFlags: QCFlag[] }) {
+  const fails = qcFlags.filter((f) => f.status === "fail");
+  const warns = qcFlags.filter((f) => f.status === "warn");
+  const passes = qcFlags.filter((f) => f.status === "pass");
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -152,6 +163,27 @@ function Result({ score }: { score: ScoreResult }) {
           {score.methodology_basis}
         </p>
       </Card>
+      {qcFlags.length > 0 && (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg">QC-проверки этой комбинации уровней</h2>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <StatusDot color="red">FAIL: {fails.length}</StatusDot>
+              <StatusDot color="amber">WARN: {warns.length}</StatusDot>
+              <StatusDot color="green">PASS: {passes.length}</StatusDot>
+            </div>
+          </div>
+          <p className="mb-4 text-xs text-muted">
+            Калькулятор работает без JE-досье — это только правила, проверяющие сами уровни
+            (несостыковки, профиль вне диапазона, необоснованные модификаторы).
+          </p>
+          <div className="space-y-4">
+            <QcSection title="Блокирующие" color="red" items={fails} />
+            <QcSection title="Требуют уточнения" color="amber" items={warns} />
+            <QcSection title="Подтверждено" color="green" items={passes} />
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

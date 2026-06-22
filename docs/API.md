@@ -136,7 +136,9 @@ CSRF-токен возвращается отдельным полем `csrf_tok
 по `created_at` как актуальную оценку должности.
 
 ## Агент
-Для реального вызова Claude нужен `ANTHROPIC_API_KEY` в `backend/.env`.
+Провайдер выбирается через `JEVAL_AGENT_PROVIDER` (`anthropic` | `groq` | `openai`
+| `fake`) в `backend/.env`; для реального вызова нужен соответствующий ключ —
+`ANTHROPIC_API_KEY`, `GROQ_API_KEY` или `OPENAI_API_KEY`.
 Без ключа: `JEVAL_FAKE_AGENT=1` включает офлайн-заглушку (уровни фиксированы,
 карточка помечается «офлайн-режим»); иначе `POST /api/evaluations` вернёт `503`.
 

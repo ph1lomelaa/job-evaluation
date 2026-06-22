@@ -23,6 +23,39 @@ export default function GuidePage() {
         </p>
       </div>
 
+      <Card>
+        <h2 className="mb-1 text-lg font-medium">Граничный модификатор (+/−)</h2>
+        <p className="text-sm leading-6 text-muted">
+          У каждой ячейки подстановочной таблицы на самом деле есть три числа: базовое
+          значение и два соседних шага геометрического ряда Hay (шаг ≈15%) — «−» (шаг вниз)
+          и «+» (шаг вверх). Модификатор общий для всех трёх факторов (Know-How, Problem
+          Solving, Accountability) — это не способ выразить неуверенность в оценке, а
+          фиксация того, что роль находится на границе между двумя соседними уровнями.
+        </p>
+        <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+          <div className="rounded-lg border border-[rgb(var(--row-divider))] p-3">
+            <div className="font-medium">Когда ставить «+»</div>
+            <p className="mt-1 text-muted">
+              Роль явно превосходит базовый уровень, но не дотягивает до следующего уровня
+              целиком — то есть находится выше базы, но ниже соседней ячейки сверху.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[rgb(var(--row-divider))] p-3">
+            <div className="font-medium">Когда ставить «−»</div>
+            <p className="mt-1 text-muted">
+              Базовый уровень формально достигнут, но только по его нижней границе — роль
+              на грани с соседней ячейкой снизу.
+            </p>
+          </div>
+        </div>
+        <p className="mt-4 text-xs leading-5 text-muted">
+          Система требует для каждого модификатора соседнюю ячейку (<code>adjacent_level</code>)
+          и текстовое объяснение границы (<code>modifier_reason</code>): без них QC-проверка
+          «модификатор не имеет обоснования» помечает фактор как WARN — модификатор без
+          указанной соседней ячейки и причины считается необоснованным.
+        </p>
+      </Card>
+
       {/* Tabs */}
       <div className="flex gap-6 overflow-x-auto border-b border-[#ded9d2] dark:border-white/10">
         {TABS.map((t) => (

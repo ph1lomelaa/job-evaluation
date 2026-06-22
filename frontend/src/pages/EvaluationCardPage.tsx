@@ -2,10 +2,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Card, ErrorBanner, Skeleton, StatusDot } from "../components/ui";
+import { QcItem, QcSection } from "../components/QcFlags";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
 import { useFactorLevelReference, useFactorLevelRules } from "../lib/factorLevels";
 import {
+  EMPTY_FACTOR_LEVELS,
+  EMPTY_FACTOR_RULES,
   factorCodes,
   groupEvidence,
   scopeSummary,
@@ -21,37 +24,10 @@ import {
   type Confidence,
   type Evaluation,
   type FactorGroup,
-  type FactorLevelReference,
-  type FactorLevelRules,
   type JobDossier,
   type QCFlag,
-  type QCStatus,
   type ScoreResult,
 } from "../lib/types";
-
-const EMPTY_FACTOR_LEVELS: FactorLevelReference = {
-  specialized_know_how: {},
-  managerial_know_how: {},
-  communication: {},
-  problem_area: {},
-  problem_complexity: {},
-  freedom_to_act: {},
-  magnitude: {},
-  impact_type: {},
-  non_quantitative_impact: {},
-};
-
-const EMPTY_FACTOR_RULES: FactorLevelRules = {
-  specialized_know_how: [],
-  managerial_know_how: [],
-  communication: [],
-  problem_area: [],
-  problem_complexity: [],
-  freedom_to_act: [],
-  magnitude: [],
-  impact_type: [],
-  non_quantitative_impact: [],
-};
 
 const CONF_DOT: Record<Confidence, Parameters<typeof StatusDot>[0]["color"]> = {
   high: "green",
@@ -62,11 +38,6 @@ const STATUS_DOT: Record<Evaluation["status"], Parameters<typeof StatusDot>[0]["
   ready: "green",
   needs_clarification: "amber",
   cannot_evaluate: "red",
-};
-const FLAG: Record<QCStatus, { ch: string; cls: string; label: string }> = {
-  pass: { ch: "✓", cls: "text-ok", label: "PASS" },
-  warn: { ch: "⚠", cls: "text-warn", label: "WARN" },
-  fail: { ch: "✗", cls: "text-accent", label: "FAIL" },
 };
 
 const STATUS_EXPLANATION: Record<
@@ -187,9 +158,17 @@ export default function EvaluationCardPage() {
                 <StatusDot color={STATUS_DOT[evaluation.status]}>
                   {STATUS_LABEL[evaluation.status]}
                 </StatusDot>
+                {evaluation.qc_flags.some((f) => f.status === "warn") && (
+                  <a href="#qc-flags" title="Перейти к QC-проверкам">
+                    <StatusDot color="amber">
+                      ⚠ {evaluation.qc_flags.filter((f) => f.status === "warn").length} замечаний QC
+                    </StatusDot>
+                  </a>
+                )}
                 <StatusDot color={CONF_DOT[evaluation.confidence]}>
                   Уверенность: {CONFIDENCE_LABEL[evaluation.confidence].toLowerCase()}
                 </StatusDot>
+                {evaluation.is_final && <StatusDot color="green">✓ Финальная версия</StatusDot>}
                 {versions.length > 1 ? (
                   <select
                     className="field max-w-[260px] !py-1.5 text-xs"
@@ -199,12 +178,14 @@ export default function EvaluationCardPage() {
                     {versions.map((v, i) => (
                       <option key={v.id} value={v.id ?? ""}>
                         Версия {versions.length - i} · {v.created_at.slice(0, 16).replace("T", " ")}
+                        {v.created_by_name ? ` · ${v.created_by_name}` : ""}
                       </option>
                     ))}
                   </select>
                 ) : (
                   <span className="num text-xs text-muted">
                     оценка от {evaluation.created_at.slice(0, 10)}
+                    {evaluation.created_by_name ? ` · ${evaluation.created_by_name}` : ""}
                   </span>
                 )}
               </>
@@ -224,6 +205,11 @@ export default function EvaluationCardPage() {
               {evaluation?.score && (
                 <Link to={`/compare?id=${id}`}>
                   <Button variant="ghost">Сравнить</Button>
+                </Link>
+              )}
+              {versions.length > 1 && (
+                <Link to={`/positions/${id}/reconcile`}>
+                  <Button variant="ghost">Сверить версии</Button>
                 </Link>
               )}
               {evaluation && (
@@ -252,7 +238,7 @@ export default function EvaluationCardPage() {
               <p className="mt-1 text-sm text-[rgb(var(--fg)/0.78)]">
                 Уровни факторов выбраны офлайн-заглушкой (FakeAgent), а не реальным агентом —
                 это демонстрационный расчёт. Переоцените должность с настоящим агентом
-                (ANTHROPIC_API_KEY/GROQ_API_KEY) перед выносом на комитет.
+                (ANTHROPIC_API_KEY/GROQ_API_KEY/OPENAI_API_KEY) перед выносом на комитет.
               </p>
             </div>
           </div>
@@ -371,7 +357,6 @@ export default function EvaluationCardPage() {
     </div>
   );
 }
-
 function DossierPreview({ position }: { position: JobDossier }) {
   const sections = [
     { title: "Цель должности", items: position.purpose ? [position.purpose] : [] },
@@ -559,7 +544,7 @@ function ScoreView({ evaluation, score }: { evaluation: Evaluation; score: Score
       </Card>
 
       {/* QC flags */}
-      <Card>
+      <Card id="qc-flags">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm font-medium">QC-проверки</div>
           <div className="flex flex-wrap gap-2 text-xs">
@@ -717,10 +702,12 @@ function FactorGroupBlock({
   adjacentLevel: string | null;
   qcFlags: QCFlag[];
 }) {
-  const [open, setOpen] = useState(false);
-  const hasModifier = plusMinus !== 0;
   const failCount = qcFlags.filter((f) => f.status === "fail").length;
   const warnCount = qcFlags.filter((f) => f.status === "warn").length;
+  // Если по фактору есть блокирующее замечание, разворачиваем блок сразу —
+  // иначе рецензент может одобрить карточку, не заметив FAIL под счётчиком.
+  const [open, setOpen] = useState(() => failCount > 0);
+  const hasModifier = plusMinus !== 0;
   return (
     <div className="border-t border-[rgb(var(--row-divider))] first:border-t-0">
       <button
@@ -738,6 +725,13 @@ function FactorGroupBlock({
           </span>
         )}
         <span className="num text-sm text-muted">{code}</span>
+        <span
+          onClick={(e) => e.stopPropagation()}
+          title={rows.map((r) => `${r.name}: ${r.level} — ${r.description}`).join("\n\n")}
+          className="grid h-4 w-4 shrink-0 cursor-help place-items-center rounded-full border border-[rgb(var(--row-divider))] text-[10px] text-muted"
+        >
+          ?
+        </span>
         <span className="num w-16 text-right text-sm font-semibold">{points}</span>
         <span className="w-24 text-right text-sm text-muted">
           <span className="block">{CONFIDENCE_LABEL[confidence]}</span>
@@ -805,28 +799,32 @@ function FactorGroupBlock({
                   </ul>
                 </>
               )}
-              {hasModifier && (
-                <>
-                  <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
-                    Почему именно {plusMinus > 0 ? "+" : "−"} (граничный модификатор)
-                  </div>
-                  {modifierReason || adjacentLevel ? (
-                    <p className="text-[rgb(var(--fg)/0.82)]">
-                      {adjacentLevel && (
-                        <>
-                          Сравнивали с соседней ячейкой <span className="num font-semibold">{adjacentLevel}</span>.{" "}
-                        </>
-                      )}
-                      {modifierReason || "Причина границы не указана текстом."}
-                    </p>
-                  ) : (
-                    <p className="text-warn">
-                      Модификатор применён, но эксперт/агент не указал ни соседний уровень, ни причину
-                      границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
-                    </p>
-                  )}
-                </>
-              )}
+              <>
+                <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
+                  {hasModifier
+                    ? `Почему именно ${plusMinus > 0 ? "+" : "−"} (граничный модификатор)`
+                    : "Модификатор"}
+                </div>
+                {!hasModifier ? (
+                  <p className="text-[rgb(var(--fg)/0.78)]">
+                    Модификатор не применён — выбран базовый уровень ячейки.
+                  </p>
+                ) : modifierReason || adjacentLevel ? (
+                  <p className="text-[rgb(var(--fg)/0.82)]">
+                    {adjacentLevel && (
+                      <>
+                        Сравнивали с соседней ячейкой <span className="num font-semibold">{adjacentLevel}</span>.{" "}
+                      </>
+                    )}
+                    {modifierReason || "Причина границы не указана текстом."}
+                  </p>
+                ) : (
+                  <p className="text-warn">
+                    Модификатор применён, но эксперт/агент не указал ни соседний уровень, ни причину
+                    границы — это считается необоснованным (см. QC «Модификатор не имеет обоснования»).
+                  </p>
+                )}
+              </>
               {qcFlags.length > 0 && (
                 <>
                   <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-fg">
@@ -844,45 +842,5 @@ function FactorGroupBlock({
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-function QcSection({
-  title,
-  color,
-  items,
-}: {
-  title: string;
-  color: Parameters<typeof StatusDot>[0]["color"];
-  items: Evaluation["qc_flags"];
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="rounded-xl border border-[rgb(var(--row-divider))] bg-[rgb(var(--field-bg))] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <StatusDot color={color}>{title} ({items.length})</StatusDot>
-      </div>
-      <ul className="space-y-3">
-        {items.map((q) => (
-          <QcItem key={q.code} flag={q} />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function QcItem({ flag }: { flag: Evaluation["qc_flags"][number] }) {
-  return (
-    <li className="flex gap-3 border-t border-[rgb(var(--row-divider))] pt-3 first:border-t-0 first:pt-0">
-      <span className={cn("num w-12 shrink-0 text-sm", FLAG[flag.status].cls)}>
-        {FLAG[flag.status].ch} {FLAG[flag.status].label}
-      </span>
-      <div className="text-sm">
-        <div>{flag.message}</div>
-        {flag.status !== "pass" && flag.recommendation && flag.recommendation !== "—" && (
-          <div className="mt-0.5 text-xs text-muted">{flag.recommendation}</div>
-        )}
-      </div>
-    </li>
   );
 }

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
-from ...domain.models import FactorSelections, ScoreResult
+from ...domain.models import FactorSelections, QCFlag, ScoreResult
+from ...qc import run_qc
 from ...reference import factor_level_reference, factor_level_rules
 from ...scoring import compute_score
 from ...scoring.grades import GRADE_MATRIX
@@ -13,13 +15,26 @@ from ..deps import WorkspaceContext, workspace_context
 router = APIRouter(prefix="/api/reference", tags=["reference"])
 
 
-@router.post("/calculate", response_model=ScoreResult)
+class CalculateResponse(BaseModel):
+    score: ScoreResult
+    qc_flags: list[QCFlag]
+
+
+@router.post("/calculate", response_model=CalculateResponse)
 def calculate_hay_score(
     selections: FactorSelections,
     _: WorkspaceContext = Depends(workspace_context),
-) -> ScoreResult:
-    """Детерминированный расчёт по функциям COMP/IC/PTSIC/FINALITE из XLSM."""
-    return compute_score(selections)
+) -> CalculateResponse:
+    """Детерминированный расчёт по подстановочным таблицам Hay.
+
+    Калькулятор работает без JE-досье, поэтому ``run_qc`` вызывается с
+    ``dossier=None`` — это даёт только те QC-правила, которые проверяют сами
+    уровни факторов (несостыковки, профиль вне диапазона, необоснованные
+    модификаторы), без правил, которым нужны KPI/масштаб/текст досье.
+    """
+    score = compute_score(selections)
+    qc_flags = run_qc(None, selections, score)
+    return CalculateResponse(score=score, qc_flags=qc_flags)
 
 
 @router.get("/grades")

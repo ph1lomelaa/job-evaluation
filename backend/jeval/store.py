@@ -647,7 +647,11 @@ class SqliteStore:
     def save_session(self, session: SessionRecord) -> None:
         with self._connection() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO sessions (token_hash,user_id,created_at,expires_at,last_used_at) VALUES (?,?,?,?,?)",
+                """INSERT INTO sessions (token_hash,user_id,created_at,expires_at,last_used_at)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(token_hash) DO UPDATE SET user_id=excluded.user_id,
+                     created_at=excluded.created_at, expires_at=excluded.expires_at,
+                     last_used_at=excluded.last_used_at""",
                 (session.token_hash, session.user_id, session.created_at.isoformat(),
                  session.expires_at.isoformat(), session.last_used_at.isoformat()),
             )

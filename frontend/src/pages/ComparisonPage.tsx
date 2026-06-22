@@ -3,9 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { Card, ErrorBanner, Field, Skeleton } from "../components/ui";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
-import { latestByPosition } from "../lib/mapping";
+import { groupEvidence, latestByPosition } from "../lib/mapping";
 import { useFetch } from "../lib/useFetch";
-import { PROFILE_LABEL, type Profile, type ScoreResult } from "../lib/types";
+import { PROFILE_LABEL, type Evaluation, type FactorGroup, type Profile, type ScoreResult } from "../lib/types";
 
 interface RoleCol {
   id: string;
@@ -42,16 +42,23 @@ export default function ComparisonPage() {
     [],
   );
 
+  // Последняя оценка на должность — переиспользуется и для карточек с баллами,
+  // и для блока "Обоснование" (evidence/doubts по факторной группе), чтобы не
+  // ходить за полной Evaluation отдельным запросом.
+  const latestEvalByPosition = useMemo<Map<string, Evaluation>>(
+    () => (data ? latestByPosition(data[1]) : new Map()),
+    [data],
+  );
+
   // Все должности с рассчитанной оценкой.
   const evaluated = useMemo<RoleCol[]>(() => {
     if (!data) return [];
-    const [positions, evaluations] = data;
-    const latest = latestByPosition(evaluations);
+    const [positions] = data;
     return positions.flatMap((p) => {
-      const score = p.id ? latest.get(p.id)?.score : null;
+      const score = p.id ? latestEvalByPosition.get(p.id)?.score : null;
       return p.id && score ? [toCol(p.id, p.name, score)] : [];
     });
-  }, [data]);
+  }, [data, latestEvalByPosition]);
 
   const [currentId, setCurrentId] = useState(params.get("id") ?? "");
   const [anchorIds, setAnchorIds] = useState<[string, string]>(["", ""]);
@@ -70,8 +77,11 @@ export default function ComparisonPage() {
   }, [current, evaluated]);
   const shownAnchors = anchors.length > 0 ? anchors : defaultAnchors;
   const comparisons = useMemo(
-    () => (current ? shownAnchors.map((anchor) => buildComparison(current, anchor)) : []),
-    [current, shownAnchors],
+    () =>
+      current
+        ? shownAnchors.map((anchor) => buildComparison(current, anchor, latestEvalByPosition))
+        : [],
+    [current, shownAnchors, latestEvalByPosition],
   );
 
   if (loading) {
@@ -187,6 +197,18 @@ export default function ComparisonPage() {
                         {item.anchor.tableVersion}) — сравнение может быть некорректным.
                       </div>
                     )}
+
+                    {(item.currentEvidence || item.anchorEvidence) && (
+                      <div className="mt-4 border-t border-[rgb(var(--row-divider))] pt-3">
+                        <div className="text-xs uppercase tracking-wide text-muted">
+                          Обоснование · {item.biggestFactor.label}
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                          <EvidenceColumn title="Текущая" data={item.currentEvidence} />
+                          <EvidenceColumn title="Якорь" data={item.anchorEvidence} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -222,7 +244,22 @@ function steps15pct(a: number, b: number): number {
   return Math.round(Math.log(hi / lo) / Math.log(1.15));
 }
 
-function buildComparison(current: RoleCol, anchor: RoleCol) {
+/** evidence/doubts конкретной факторной группы у последней оценки должности —
+ * для блока "Обоснование", не для самого расчёта расхождения. */
+function evidenceFor(
+  positionId: string,
+  key: FactorGroup,
+  evalByPosition: Map<string, Evaluation>,
+): { evidence: string[]; doubts: string[] } | null {
+  const score = evalByPosition.get(positionId)?.score;
+  return score ? groupEvidence(score)[key] : null;
+}
+
+function buildComparison(
+  current: RoleCol,
+  anchor: RoleCol,
+  evalByPosition: Map<string, Evaluation>,
+) {
   const gradeGap = current.grade - anchor.grade;
   const totalGap = current.total - anchor.total;
   const versionMismatch =
@@ -235,10 +272,10 @@ function buildComparison(current: RoleCol, anchor: RoleCol) {
   const totalSteps = steps15pct(current.total, anchor.total);
   const isSignificant = totalSteps >= ANCHOR_GAP_STEPS_THRESHOLD;
 
-  const factorGaps = [
-    { label: "Know-How", delta: current.knowHow - anchor.knowHow },
-    { label: "Problem Solving", delta: current.problemSolving - anchor.problemSolving },
-    { label: "Accountability", delta: current.accountability - anchor.accountability },
+  const factorGaps: { key: FactorGroup; label: string; delta: number }[] = [
+    { key: "know_how", label: "Know-How", delta: current.knowHow - anchor.knowHow },
+    { key: "problem_solving", label: "Problem Solving", delta: current.problemSolving - anchor.problemSolving },
+    { key: "accountability", label: "Accountability", delta: current.accountability - anchor.accountability },
   ];
   const biggestFactor = [...factorGaps].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
 
@@ -256,6 +293,9 @@ function buildComparison(current: RoleCol, anchor: RoleCol) {
     primaryDifference,
     factorNotes,
     versionMismatch,
+    biggestFactor,
+    currentEvidence: evidenceFor(current.id, biggestFactor.key, evalByPosition),
+    anchorEvidence: evidenceFor(anchor.id, biggestFactor.key, evalByPosition),
   };
 }
 
@@ -282,6 +322,36 @@ function Line({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-4">
       <dt className="shrink-0 text-muted">{label}</dt>
       <dd className="text-right">{value}</dd>
+    </div>
+  );
+}
+
+function EvidenceColumn({
+  title,
+  data,
+}: {
+  title: string;
+  data: { evidence: string[]; doubts: string[] } | null;
+}) {
+  return (
+    <div>
+      <div className="font-medium text-muted">{title}</div>
+      {data && data.evidence.length > 0 ? (
+        <ul className="mt-1 list-disc space-y-1 pl-4">
+          {data.evidence.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-muted">—</p>
+      )}
+      {data && data.doubts.length > 0 && (
+        <ul className="mt-1 list-disc space-y-1 pl-4 text-warn">
+          {data.doubts.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

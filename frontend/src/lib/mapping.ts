@@ -11,6 +11,32 @@ import type {
   ScoreResult,
 } from "./types";
 
+// Заглушки до первого фетча справочника уровней/правил (GET /api/reference/levels,
+// /api/reference/level-rules) — используются и карточкой оценки, и сверкой версий.
+export const EMPTY_FACTOR_LEVELS: FactorLevelReference = {
+  specialized_know_how: {},
+  managerial_know_how: {},
+  communication: {},
+  problem_area: {},
+  problem_complexity: {},
+  freedom_to_act: {},
+  magnitude: {},
+  impact_type: {},
+  non_quantitative_impact: {},
+};
+
+export const EMPTY_FACTOR_RULES: FactorLevelRules = {
+  specialized_know_how: [],
+  managerial_know_how: [],
+  communication: [],
+  problem_area: [],
+  problem_complexity: [],
+  freedom_to_act: [],
+  magnitude: [],
+  impact_type: [],
+  non_quantitative_impact: [],
+};
+
 /** Последняя оценка для каждой должности (по created_at). */
 export function latestByPosition(evaluations: Evaluation[]): Map<string, Evaluation> {
   const map = new Map<string, Evaluation>();

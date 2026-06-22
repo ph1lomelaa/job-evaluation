@@ -118,12 +118,13 @@ class FakeAgent:
         p = _profile_from_dossier(dossier)
         return AgentOutput(
             role_summary=(dossier.purpose or f"Роль «{dossier.name}» (резюме не предоставлено).")
-            + " [Офлайн-режим: уровни выбраны эвристикой, не Claude.]",
+            + " [Офлайн-режим: уровни выбраны эвристикой, не реальным агентом.]",
             overall_confidence=Confidence.MEDIUM,
             reasoning=(
                 "ОФЛАЙН-РЕЖИМ: уровни факторов выбраны эвристикой на основе масштаба, "
                 "полномочий и кейсов из досье. Не является реальной оценкой по Hay Group. "
-                "Для точной оценки укажите ANTHROPIC_API_KEY."
+                "Для точной оценки укажите ANTHROPIC_API_KEY/GROQ_API_KEY/OPENAI_API_KEY "
+                "и JEVAL_AGENT_PROVIDER в .env."
             ),
             clarifying_questions=["Какой годовой CAPEX находится в зоне влияния роли?"],
             recommendation="Провести реальную оценку агентом перед комитетом.",
