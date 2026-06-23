@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, ErrorBanner, Input, StatusDot } from "../components/ui";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { cn } from "../lib/cn";
+import { downloadCsv, toCsv } from "../lib/csv";
 import { latestByPosition, toPositionRow } from "../lib/mapping";
 import { useFetch } from "../lib/useFetch";
 import {
@@ -15,6 +16,9 @@ import {
 
 const FILTERS_KEY = "jeval.dashboard.filters.v1";
 const DRAFT_KEY = "jeval.job-form.draft.v1";
+const IMPORT_FALLBACK_NOTICE =
+  "Черновик создан без ИИ (по ключевым словам документа) — точность ниже. " +
+  "Проверьте все поля перед запуском оценки.";
 
 interface DashboardFilters {
   query: string;
@@ -205,15 +209,26 @@ export default function DashboardPage() {
     setDraftMeta(null);
   }
 
+  // ИИ-провайдер может быть недоступен (нет ключа / сбой) — это не повод
+  // оставлять HR без черновика: бэкенд умеет извлечь те же поля эвристикой.
+  async function importDocumentWithFallback(file: File) {
+    try {
+      return { result: await api.importDocument(file, true), notice: null as string | null };
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 503) throw e;
+      return { result: await api.importDocument(file, false), notice: IMPORT_FALLBACK_NOTICE };
+    }
+  }
+
   async function importDocument(file: File | null) {
     if (!file) return;
     setImportBusy(true);
     setImportError(null);
     try {
-      const result = await api.importDocument(file, true);
+      const { result, notice } = await importDocumentWithFallback(file);
       const id = result.position.id;
       reload();
-      if (id) navigate(`/positions/${id}`);
+      if (id) navigate(`/positions/${id}`, notice ? { state: { importNotice: notice } } : undefined);
     } catch (e) {
       setImportError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -237,6 +252,20 @@ export default function DashboardPage() {
       ),
     [allRows, query, dept, status],
   );
+
+  function exportCsv() {
+    const headers = ["Должность", "ДЗО", "Функция", "Статус", "Грейд", "Уверенность", "Обновлено"];
+    const csvRows = rows.map((p) => [
+      p.name,
+      p.dzo,
+      p.function,
+      STATUS_LABEL[p.status],
+      p.grade ?? "",
+      p.confidence ? CONFIDENCE_LABEL[p.confidence] : "",
+      p.updatedAt,
+    ]);
+    downloadCsv(`dolzhnosti-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, csvRows));
+  }
 
   return (
     <div className="space-y-8">
@@ -390,6 +419,9 @@ export default function DashboardPage() {
             </option>
           ))}
         </select>
+        <Button variant="secondary" disabled={rows.length === 0} onClick={exportCsv}>
+          Экспорт в CSV
+        </Button>
       </div>
 
       {/* Таблица */}

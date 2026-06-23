@@ -155,6 +155,39 @@ export const api = {
     ),
   finalizeEvaluation: (id: string) =>
     request<Evaluation>(`/api/evaluations/${id}/finalize`, { method: "POST" }),
+  exportEvaluationPdf: async (id: string): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/api/evaluations/${id}/export.pdf`, {
+        credentials: "include",
+        headers: sessionHeaders(false),
+      });
+    } catch {
+      throw new ApiError(`Бэкенд недоступен (${BASE}). Запустите: uvicorn jeval.api.main:app`);
+    }
+    if (!res.ok) {
+      let detail = `${res.status} ${res.statusText}`;
+      try {
+        const body = await res.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        /* не JSON — оставляем статус */
+      }
+      throw new ApiError(detail, res.status);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const match = /filename\*=UTF-8''([^;]+)/.exec(disposition);
+    const filename = match ? decodeURIComponent(match[1]) : `evaluation-${id}.pdf`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
   listPublicForms: () => request<PublicJobForm[]>("/api/public-forms"),
   createPublicForm: (body: { title: string; recipient?: string; expires_in_days: number }) =>
     request<PublicJobForm>("/api/public-forms", { method: "POST", body: JSON.stringify(body) }),

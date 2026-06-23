@@ -115,6 +115,15 @@ export function ErrorBanner({ message, onRetry }: { message: string; onRetry?: (
   );
 }
 
+// ── NoticeBanner (предупреждение, не ошибка — напр. деградация без блокировки) ─
+export function NoticeBanner({ message }: { message: string }) {
+  return (
+    <div className="glass flex items-center gap-3 border-warn/40 p-4 text-sm">
+      <span className="text-warn">⚠ {message}</span>
+    </div>
+  );
+}
+
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("glass animate-pulse rounded-lg", className)} />;

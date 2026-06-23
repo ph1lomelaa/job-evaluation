@@ -104,6 +104,23 @@ def test_evaluation_unknown_position_404(client):
     assert client.post("/api/evaluations", json={"position_id": "nope"}).status_code == 404
 
 
+def test_export_evaluation_pdf(client, full_dossier):
+    body = full_dossier.model_dump(mode="json", exclude_none=True)
+    body.pop("id", None)
+    pid = client.post("/api/positions", json=body).json()["id"]
+    ev = client.post("/api/evaluations", json={"position_id": pid}).json()
+
+    response = client.get(f"/api/evaluations/{ev['id']}/export.pdf")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "filename*=UTF-8''" in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF-")
+
+
+def test_export_evaluation_pdf_unknown_id_404(client):
+    assert client.get("/api/evaluations/nope/export.pdf").status_code == 404
+
+
 def test_finalize_evaluation_unsets_other_versions(client, full_dossier):
     """UX Шаг 4b (вариант A): сверка параллельных независимых оценок одной
     должности — финальная версия одна, остальные снимаются с флага."""

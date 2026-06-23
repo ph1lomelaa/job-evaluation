@@ -9,6 +9,7 @@ SDK-вызову, поэтому форму ответа (message.parsed/.refusa
 
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -54,3 +55,22 @@ def test_select_factors_requires_api_key(full_dossier, monkeypatch):
             agent.select_factors(full_dossier)
     finally:
         get_settings.cache_clear()
+
+
+def test_select_factors_wraps_sdk_error_as_runtime_error(full_dossier, monkeypatch):
+    class FailingCompletions:
+        @staticmethod
+        def parse(**kwargs):
+            del kwargs
+            raise OSError("network down")
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["timeout"] > 0
+            self.chat = SimpleNamespace(completions=FailingCompletions())
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeClient))
+    agent = OpenAIAgent(api_key="test-key")
+
+    with pytest.raises(RuntimeError, match="OpenAI не завершил оценку"):
+        agent.select_factors(full_dossier)

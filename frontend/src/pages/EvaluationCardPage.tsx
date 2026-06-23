@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, ErrorBanner, Skeleton, StatusDot } from "../components/ui";
+import { Button, Card, ErrorBanner, NoticeBanner, Skeleton, StatusDot } from "../components/ui";
 import { QcItem, QcSection } from "../components/QcFlags";
 import { api } from "../lib/api";
 import { cn } from "../lib/cn";
@@ -65,8 +65,13 @@ export default function EvaluationCardPage() {
   const [routeError, setRouteError] = useState<string | null>(
     () => (location.state as { evaluationError?: string } | null)?.evaluationError ?? null,
   );
+  const [routeNotice] = useState<string | null>(
+    () => (location.state as { importNotice?: string } | null)?.importNotice ?? null,
+  );
   const [evalError, setEvalError] = useState<string | null>(null);
   const [versionId, setVersionId] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const { data, error, loading, reload } = useFetch(
     () => Promise.all([api.getPosition(id), api.listEvaluations(id)]),
@@ -110,10 +115,24 @@ export default function EvaluationCardPage() {
     }
   }
 
+  async function exportPdf() {
+    if (!evaluation?.id) return;
+    setExportingPdf(true);
+    setExportError(null);
+    try {
+      await api.exportEvaluationPdf(evaluation.id);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
         {(routeError || evalError) && <ErrorBanner message={routeError ?? evalError ?? ""} />}
+        {routeNotice && <NoticeBanner message={routeNotice} />}
         <Skeleton className="h-24" />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
@@ -133,6 +152,7 @@ export default function EvaluationCardPage() {
   return (
     <div className="space-y-6">
       {(routeError || evalError) && <ErrorBanner message={routeError ?? evalError ?? ""} />}
+      {routeNotice && <NoticeBanner message={routeNotice} />}
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -198,10 +218,16 @@ export default function EvaluationCardPage() {
                   title={evaluation.is_test_data ? "Тестовые данные нельзя выгружать для комитета" : undefined}
                   onClick={() => window.print()}
                 >
-                  PDF
+                  Печать
+                </Button>
+              )}
+              {evaluation && (
+                <Button variant="secondary" disabled={exportingPdf} onClick={exportPdf}>
+                  {exportingPdf ? "Готовим PDF…" : "Экспорт в PDF"}
                 </Button>
               )}
           </div>
+          {exportError && <p className="mt-2 text-xs text-accent print:hidden">{exportError}</p>}
         </div>
       </div>
 
@@ -214,9 +240,9 @@ export default function EvaluationCardPage() {
                 Тестовые данные — не для Оценочного комитета
               </div>
               <p className="mt-1 text-sm text-[rgb(var(--fg)/0.78)]">
-                Уровни факторов выбраны офлайн-заглушкой (FakeAgent), а не реальным агентом —
-                это демонстрационный расчёт. Переоцените должность с настоящим агентом
-                (ANTHROPIC_API_KEY/GROQ_API_KEY/OPENAI_API_KEY) перед выносом на комитет.
+                Уровни факторов выбраны офлайн-заглушкой, а не реальным AI-агентом — это
+                демонстрационный расчёт. Обратитесь к администратору системы, чтобы подключить
+                реальный агент, и переоцените должность перед выносом на комитет.
               </p>
             </div>
           </div>

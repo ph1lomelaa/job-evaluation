@@ -41,17 +41,31 @@ class OpenAIAgent:
         # Импорт внутри метода: пакет не нужен для движка/тестов без сети.
         from openai import OpenAI
 
-        client = OpenAI(api_key=self._api_key)
-        completion = client.chat.completions.parse(
-            model=self._model,
-            max_completion_tokens=max_tokens,
-            temperature=0,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_message(dossier)},
-            ],
-            response_format=AgentOutput,
+        settings = get_settings()
+        client = OpenAI(
+            api_key=self._api_key,
+            timeout=settings.openai_timeout_seconds,
+            max_retries=1,
         )
+        try:
+            completion = client.chat.completions.parse(
+                model=self._model,
+                max_completion_tokens=max_tokens,
+                temperature=0,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": build_user_message(dossier)},
+                ],
+                response_format=AgentOutput,
+            )
+        except Exception as exc:
+            # Ошибки SDK (сеть, timeout, 4xx/5xx провайдера) не должны
+            # превращаться в необработанный HTTP 500 нашего API. Router
+            # преобразует RuntimeError в контролируемый 502 для интерфейса.
+            raise RuntimeError(
+                "OpenAI не завершил оценку. Проверьте соединение и доступность "
+                "модели, затем повторите запуск."
+            ) from exc
 
         return self._parse(completion)
 

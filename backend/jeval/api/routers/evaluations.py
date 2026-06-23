@@ -5,8 +5,10 @@ from __future__ import annotations
 import uuid
 from itertools import product
 from typing import Literal, Optional, Union
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, ValidationError
 
 from ...domain.models import (
@@ -27,6 +29,7 @@ from ...domain.enums import (
     ProblemComplexity,
     SpecializedKnowHow,
 )
+from ...export.pdf import build_evaluation_pdf
 from ...hierarchy import run_hierarchy_qc
 from ...orchestrator import JobEvaluator, _committee_recommendation, _downgrade, decide_status
 from ...qc import has_blocking_failures, run_qc
@@ -111,6 +114,42 @@ def get_evaluation(
     if not ev:
         raise HTTPException(404, "Оценка не найдена")
     return _with_author_name(ev, store)
+
+
+@router.get("/{evaluation_id}/export.pdf")
+def export_evaluation_pdf(
+    evaluation_id: str,
+    ctx: WorkspaceContext = Depends(workspace_context),
+    store: Store = Depends(get_store),
+) -> Response:
+    """Подписываемый PDF карточки оценки для досье Оценочного комитета —
+    альтернатива `window.print()` на EvaluationCardPage.tsx (раздел 10)."""
+    evaluation = store.get_evaluation(evaluation_id, ctx.company_id)
+    if not evaluation:
+        raise HTTPException(404, "Оценка не найдена")
+    if not evaluation.position_id:
+        raise HTTPException(400, "У оценки нет привязанной должности")
+    position = store.get_position(evaluation.position_id, ctx.company_id)
+    if not position:
+        raise HTTPException(404, "Должность для этой оценки не найдена")
+
+    evaluation = _with_author_name(evaluation, store)
+    try:
+        pdf_bytes = build_evaluation_pdf(position, evaluation)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    # Content-Disposition должен быть latin-1 — имя должности почти всегда
+    # кириллица, поэтому ASCII-имя в filename — запасной вариант для старых
+    # клиентов, а реальное читаемое имя передаётся через filename* (RFC 5987).
+    encoded_name = quote(f"otsenka-{position.name}-{evaluation_id}.pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"evaluation-{evaluation_id}.pdf\"; filename*=UTF-8''{encoded_name}"
+        },
+    )
 
 
 @router.get("/{evaluation_id}/range", response_model=EvaluationRangeResponse)

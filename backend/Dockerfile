@@ -7,8 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
+# fonts-dejavu-core: кириллица для PDF-экспорта (jeval/export/pdf.py) —
+# встроенные шрифты ReportLab (Helvetica/Times) не содержат кириллических глифов.
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt

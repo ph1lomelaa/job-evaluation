@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # OpenAI (альтернатива Anthropic/Groq)
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    openai_timeout_seconds: float = 90.0
 
     # Выбор провайдера: "anthropic" | "groq" | "openai" | "fake"
     # "fake" — офлайн-заглушка без API-ключа

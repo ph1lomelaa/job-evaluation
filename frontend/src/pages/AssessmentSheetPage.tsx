@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, ErrorBanner, Input, Skeleton, StatusDot } from "../components/ui";
+import { Button, Card, ErrorBanner, Input, Skeleton, StatusDot } from "../components/ui";
 import { api } from "../lib/api";
+import { downloadCsv, toCsv } from "../lib/csv";
 import { latestByPosition } from "../lib/mapping";
 import { useFetch } from "../lib/useFetch";
 import { STATUS_LABEL, type EvaluationStatus } from "../lib/types";
@@ -26,10 +27,47 @@ export default function AssessmentSheetPage() {
       .sort((a, b) => a.position.name.localeCompare(b.position.name, "ru"));
   }, [data, query]);
 
+  function exportCsv() {
+    const headers = [
+      "Должность", "ДЗО", "Подразделение",
+      "Know-How код", "Know-How +/−", "Know-How баллы",
+      "Problem Solving код", "Problem Solving +/−", "Problem Solving % KH", "Problem Solving баллы",
+      "Accountability код", "Accountability +/−", "Accountability баллы",
+      "Итого", "Профиль", "Грейд", "Статус",
+    ];
+    const csvRows = rows.map(({ position, evaluation }) => {
+      const s = evaluation?.selections;
+      const score = evaluation?.score;
+      return [
+        position.name,
+        position.dzo ?? "",
+        position.department ?? "",
+        s ? `${s.know_how.specialization}/${s.know_how.management}/${s.know_how.communication}` : "",
+        s ? modifier(s.know_how.plus_minus) : "",
+        score?.know_how.points ?? "",
+        s ? `${s.problem_solving.area}/${s.problem_solving.complexity}` : "",
+        s ? modifier(s.problem_solving.plus_minus) : "",
+        score ? `${score.problem_solving.percentage}%` : "",
+        score?.problem_solving.points ?? "",
+        s ? `${s.accountability.freedom}/${s.accountability.magnitude}/${s.accountability.non_quantitative_impact ?? s.accountability.impact ?? ""}` : "",
+        s ? modifier(s.accountability.plus_minus) : "",
+        score?.accountability.points ?? "",
+        score?.total_points ?? "",
+        score?.profile_long ?? "",
+        score?.grade ?? "",
+        evaluation ? STATUS_LABEL[evaluation.status] : "Не оценена",
+      ];
+    });
+    downloadCsv(`vedomost-otsenki-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(headers, csvRows));
+  }
+
   return <div className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div><h1>Ведомость оценки должностей</h1><p className="mt-2 max-w-3xl text-sm text-muted">Единый реестр факторных оценок. Модификаторы «+» и «−» показаны отдельно от базовых уровней и уже учтены в баллах.</p></div>
-      <div className="w-full md:w-[320px]"><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти должность" /></div>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-full md:w-[280px]"><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти должность" /></div>
+        <Button variant="secondary" disabled={rows.length === 0} onClick={exportCsv}>Экспорт в CSV</Button>
+      </div>
     </div>
     {error && <ErrorBanner message={error} onRetry={reload} />}
     {loading ? <Skeleton className="h-80" /> : <Card className="overflow-hidden rounded-[18px] p-0">
